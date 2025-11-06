@@ -1,5 +1,4 @@
-import { Website } from '../models/Website';
-import { urlParser, validators } from '../utils/urlParser';
+import { detectURL } from '../services/DetectURL.js';
 import { StorageService } from '../services/StorageService';
 import { CONSTANTS } from '../utils/constants';
 
@@ -9,41 +8,82 @@ export class WebsiteController {
         this.currentWebsite = null;
     }
 
-    async detectWebsite(url) {
+    async detectWebsite(inputUrl) {
+        // Ask your detector for the active tab’s info
+        // (returns { url, domainDisplay, tabId })
+        const info = await detectURL().catch((e) => {
+            console.warn('detectURL() failed:', e);
+            return null;
+        });
+
+        // Choose the URL to analyze:
+        // 1) prefer detectURL().url, else use the caller’s inputUrl, else bail.
+        const url = info?.url || inputUrl || null;
         if (!url) return null;
 
-        const parsedUrl = urlParser.parse(url);
-        if (!parsedUrl) return null;
-
-        const website = new Website (
-            parsedUrl.url,
-            parsedUrl.hostname,
-            parsedUrl.protocal,
-            parsedUrl.isSecure
-        );
-
-        if (website.isValid) {
-            this.currentWebsite = website;
-            await this.StorageService.save(CONSTANTS.STORAGE_KEYS.CURRENT_WEBSITE, {
-                url: website.url,
-                hostname: website.hostname,
-                protocol: website.protocol,
-                isSecure: website.isSecure,
-                timestamp: website.timestamp
-            });
-            return website;
+        // Safely derive hostname/protocol/isSecure from the URL string
+        let hostname = '';
+        let protocol = '';
+        let isSecure = false;
+        try {
+            const u = new URL(url);
+            hostname = u.hostname;
+            protocol = (u.protocol || '').replace(':', ''); // "https:" -> "https"
+            isSecure = protocol.toLowerCase() === 'https';
+        } catch {
+          // If the URL can’t be parsed, we can’t analyze it
+          return null;
         }
-        
-        return null;
+
+        // Prefer your detector’s friendly display domain if present,
+        // else fall back to hostname, else the raw URL
+        const displayUrl = info?.domainDisplay || hostname || url;
+
+        // Plain object (transparent & simple)
+        const website = {
+          url,
+          hostname,
+          protocol,
+          isSecure,
+          displayUrl,
+          timestamp: Date.now(),
+        };
+
+        // Block internal/extension pages (replacement for validators/isSpecialPage)
+        if (!this.canAnalyzeWebsite(website)) {
+          this.currentWebsite = null;
+          return null;
+        }
+
+        // Persist exactly like before so popup/background behaviors remain unchanged
+        this.currentWebsite = website;
+        await this.StorageService.save(CONSTANTS.STORAGE_KEYS.CURRENT_WEBSITE, {
+          url: website.url,
+          hostname: website.hostname,
+          protocol: website.protocol,
+          isSecure: website.isSecure,
+          timestamp: website.timestamp,
+        });
+
+        return website;
     }
 
+
+    // Getter for what we last detected
     async getCurrentWebsite() {
         return this.currentWebsite;
     }
 
+    // No validators, will block internal browser and extension pages
     canAnalyzeWebsite(website) {
-        if (!website) return false;
-        return validators.canAnalyze(website.url);
+        if (!website.url) return false;
+        const u = website.url;
+        return !(
+          u.startsWith('chrome://') ||
+          u.startsWith('edge://') ||
+          u.startsWith('about:') ||
+          u.startsWith('chrome-extension://')
+        );
     }
 
     getWebsiteDisplayInfo(website) {
@@ -56,17 +96,17 @@ export class WebsiteController {
             };
         }
 
-        if (website.isSpecialPage()) {
-            return {
-                displayUrl: website.getDisplayUrl(),
-                canAnalyze: false,
-                isSecure: false,
-                message: 'Cannot Analyze Browser Internal Pages'
-            };
+        if (!this.canAnalyzeWebsite(website)) {
+          return {
+            displayUrl: website.displayUrl || website.hostname || 'Internal Page',
+            canAnalyze: false,
+            isSecure: false,
+            message: 'Cannot Analyze Browser Internal Pages',
+          };
         }
 
         return {
-            displayUrl: website.getDisplayUrl(),
+            displayUrl: website.displayUrl || website.hostname || website.url
             fullUrl: website.url,
             hostname: website.hostname,
             canAnalyze: true,
