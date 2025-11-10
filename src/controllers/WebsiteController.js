@@ -1,5 +1,5 @@
 import { detectURL } from '../services/DetectURL.js';
-import { StorageService } from '../services/StorageService';
+import { StorageService } from '../services/StorageService.js';
 import { CONSTANTS } from '../utils/constants';
 
 export class WebsiteController {
@@ -106,7 +106,7 @@ export class WebsiteController {
         }
 
         return {
-            displayUrl: website.displayUrl || website.hostname || website.url
+            displayUrl: website.displayUrl || website.hostname || website.url,
             fullUrl: website.url,
             hostname: website.hostname,
             canAnalyze: true,
