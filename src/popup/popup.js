@@ -1,8 +1,12 @@
-import Popup from '../views/Popup.svelte';
-import '../views/styles/app.css';
+import { PopupController } from "./PopupController.js";
 
-const app = new Popup({
-    target: document.getElementById('app')
+const hostEl = document.getElementById("host");
+const urlEl = document.getElementById("url");
+const scoreEl = document.getElementById("score");
+
+const pc = new PopupController();
+pc.init(({ host, url, score }) => {
+  hostEl.textContent = host || "(unknown)";
+  urlEl.textContent = url || "";
+  scoreEl.textContent = score || "TBD";
 });
-
-export default app;
