@@ -2,71 +2,87 @@
     import { onMount } from "svelte";
     import PopupController from "../controllers/PopupController.js";
 
-    // The website data that will be displayed
-    let website = {
-        fullUrl: "",
-        host: "",
+    let info = {
+        fullUrl: "Loading...",
+        host: "Loading...",
         isSecure: false,
         privacyScore: null,
         message: "Loading..."
     };
 
-    let isLoading = true;
+    let loading = true;
 
-    onMount(async () => {
-        await loadWebsiteInfo();
-    });
-
-    async function loadWebsiteInfo() {
-        isLoading = true;
-
-        try {
-            website = await PopupController.loadWebsiteInfo();
-        } catch (error) {
-            console.error("Error loading website info:", error);
-
-            website = {
-                fullUrl: "N/A",
-                host: "N/A",
-                isSecure: false,
-                privacyScore: null,
-                message: "Error loading website data"
-            };
-        }
-
-        isLoading = false;
+    async function load() {
+        loading = true;
+        info = await PopupController.loadWebsiteInfo();
+        loading = false;
     }
 
-    async function handleRefresh() {
-        await loadWebsiteInfo();
-    }
+    onMount(load);
 </script>
 
 <style>
-    .container {
-        min-width: 300px;
+    .title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #ffffff;
+    }
+    .card {
+        background: #0d0d0f;
+        border-radius: 10px;
         padding: 16px;
-        font-size: 14px;
+        width: 340px;
+        box-shadow: 0 0 15px rgba(0, 132, 255, 0.5);
+        border: 1px solid #1a1a1a;
+    }
+    .label {
+        font-weight: 600;
+        color: #66b3ff;
+    }
+    .text {
+        color: #e6e6e6;
+        font-size: 0.95rem;
+        word-break: break-all;
+    }
+    .refresh-btn {
+        margin-top: 14px;
+        background: #0084ff;
+        padding: 8px 14px;
+        color: white;
+        border-radius: 6px;
+        border: none;
+        font-size: 0.9rem;
+        cursor: pointer;
+    }
+    .refresh-btn:hover {
+        background: #0a93ff;
     }
 </style>
 
-<div class="container">
-    <h1 class="text-lg font-bold mb-4">Privacy Lens</h1>
+<div class="card">
+    <div class="title">Privacy Lens</div>
 
-    {#if isLoading}
-        <p>Loading...</p>
+    {#if loading}
+        <p class="text">Loading...</p>
     {:else}
-        <p><strong>Website:</strong> {website.fullUrl || "N/A"}</p>
-        <p><strong>Host:</strong> {website.host || "N/A"}</p>
-        <p><strong>Secure:</strong> {website.isSecure ? "Yes" : "No"}</p>
-        <p><strong>Privacy Score:</strong> {website.privacyScore ?? "—"}</p>
-        <p class="text-xs text-gray-500 mt-4">{website.message}</p>
+        <p><span class="label">Website:</span></p>
+        <p class="text">{info.fullUrl}</p>
 
-        <button
-            class="mt-4 p-2 bg-blue-600 text-white rounded"
-            on:click={handleRefresh}
-        >
-            Refresh
-        </button>
+        <p style="margin-top: 10px;"><span class="label">Host:</span></p>
+        <p class="text">{info.host}</p>
+
+        <p style="margin-top: 10px;"><span class="label">Secure:</span>
+            <span class="text">{info.isSecure ? "Yes" : "No"}</span>
+        </p>
+
+        <p style="margin-top: 10px;"><span class="label">Privacy Score:</span>
+            <span class="text">{info.privacyScore ?? "—"}</span>
+        </p>
+
+        <p class="text" style="margin-top: 14px; font-size: 0.85rem; opacity: 0.8;">
+            {info.message}
+        </p>
     {/if}
+
+    <button class="refresh-btn" on:click={load}>Refresh</button>
 </div>

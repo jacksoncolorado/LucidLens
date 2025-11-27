@@ -10,13 +10,14 @@
         "activeTab"
     ],
     "host_permissions": [
-        "<all_urls>"
+        "<all_urls>",
+         "https://api.x.ai/*"
     ],
     "background": {
-        "service_worker": "src/background/background.js"
+        "service_worker": "background.js"
     },
     "action": {
-        "default_popup": "src/popup/popup.html",
+        "default_popup": "popup.html",
         "default_icon": {
             "16": "icons/icon16.png",
             "48": "icons/icon48.png",
@@ -29,6 +30,6 @@
         "128": "icons/icon128.png"
     },
     "content_security_policy": {
-        "extension_pages": "script-src 'self'; object-src 'self'"
+        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.x.ai https://*.x.ai"
     }
 }
