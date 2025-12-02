@@ -1,32 +1,49 @@
-import { WebsiteController } from './WebsiteController';
+import WebsiteController from './WebsiteController.js';
 import { BrowserAPIService } from '../services/BrowserAPIService.js'
 
-export class PopupController {
-    constructor() {
-        this.websiteController = new WebsiteController();
-        this.browserService = new BrowserAPIService();
-    }
+// src/controllers/PopupController.js
 
-    async initialize() {
-        try {
-            const tab = await this.browserService.getCurrentTab();
-            if (tab && tab.url) {
-                const website = await this.websiteController.detectWebsite(tab.url);
-                return this.websiteController.getWebsiteDisplayInfo(website);
-            }
-            return this.websiteController.getWebsiteDisplayInfo(null);
-        } catch(error) {
-            console.error('Error Initializing Popup:', error)
-            return {
-                displayUrl: 'Error Loading Website',
-                canAnalyze: false,
-                isSecure: false,
-                message: 'An Error Occurred'
-            };
-        }
-    }
+export default class PopupController {
 
-    async refreshWebsiteInfo() {
-        return await this.initialize();
+    static async loadWebsiteInfo() {
+        return new Promise((resolve) => {
+            chrome.runtime.sendMessage({ type: "popup:ready" }, (response) => {
+
+                // 👇 This prevents the annoying message-port warning
+                if (chrome.runtime.lastError) {
+                    console.warn("Popup message error:", chrome.runtime.lastError.message);
+
+                    resolve({
+                        fullUrl: null,
+                        host: null,
+                        isSecure: false,
+                        privacyScore: null,
+                        message: "No response from background"
+                    });
+                    return;
+                }
+
+                // If no response was returned
+                if (!response) {
+                    resolve({
+                        fullUrl: null,
+                        host: null,
+                        isSecure: false,
+                        privacyScore: null,
+                        message: "No response from background"
+                    });
+                    return;
+                }
+
+                // Normal successful background → popup result
+                resolve({
+                    fullUrl: response.fullUrl,
+                    host: response.host,
+                    isSecure: response.isSecure,
+                    privacyScore: response.privacyScore,
+                    message: response.message
+                });
+            });
+        });
     }
 }
