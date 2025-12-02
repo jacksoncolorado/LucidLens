@@ -12,7 +12,7 @@ export class Website {
     }
 
     isSpecialPage() {
-        const specialPages = ['chrome:', 'about:', 'chrome-extension:', 'file:',];
+        const specialProtocols = ['chrome:', 'about:', 'chrome-extension:', 'file:'];
         return specialProtocols.some(proto => this.url.startsWith(proto));
     }
 

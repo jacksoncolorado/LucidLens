@@ -4,14 +4,19 @@ export const validators = {
     },
 
     isLocalhost(hostname) {
-        return hostname === 'loaclhost' ||
+        return hostname === 'localhost' ||
                hostname === '127.0.0.1' ||
                hostname.endsWith('.local');
     },
 
+    isSpecialUrl(url) {
+        const specialProtocols = ['chrome:', 'about:', 'chrome-extension:', 'file:', 'edge:', 'brave:'];
+        return specialProtocols.some(proto => url.startsWith(proto));
+    },
+
     canAnalyze(url) {
         if (!url) return false;
-        if (urlParser.isSpecialUrl(url)) return false;
+        if (validators.isSpecialUrl(url)) return false;
         return validators.isValidHttpUrl(url);
     }
 };

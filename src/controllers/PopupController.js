@@ -41,7 +41,9 @@ export default class PopupController {
                     host: response.host,
                     isSecure: response.isSecure,
                     privacyScore: response.privacyScore,
-                    message: response.message
+                    privacyData: response.privacyData,
+                    privacyScoreDetails: response.privacyScoreDetails,
+                    message: response.message || "Privacy check complete."
                 });
             });
         });
