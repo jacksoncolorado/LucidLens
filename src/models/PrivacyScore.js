@@ -2,172 +2,135 @@
 
 export class PrivacyScore {
     constructor(privacyData) {
-        this.privacyData = privacyData;
-        this.score = 0;
-        this.maxScore = 100;
-        this.rating = 'Unknown';
-        this.factors = [];
+        this.data = privacyData;
+        this.score = 100;
+        this.rating = "Unknown";
+        this.factors = {};
         this.recommendations = [];
     }
 
-    /**
-     * Calculate privacy score based on collected data
-     */
+    // ------------------------------
+    // Helper: stable bucket scoring
+    // ------------------------------
+    bucket(value, ranges) {
+        for (const r of ranges) {
+            if (value >= r.min && value <= r.max) return r.penalty;
+        }
+        return 0;
+    }
+
     calculate() {
-        if (!this.privacyData) {
+        if (!this.data) {
             this.score = 0;
-            this.rating = 'Unknown';
-            return;
+            this.rating = "Unknown";
+            this.factors = {};
+            this.recommendations = [];
+            return 0;
         }
 
-        let score = this.maxScore;
-        const summary = this.privacyData.getSummary();
-        this.factors = [];
+        // --------------------------
+        // Collected data
+        // --------------------------
+        const scripts = this.data.tracking?.scripts?.length || 0;
 
-        // Deduct points for tracking cookies (max -30 points)
-        const trackingCookiePenalty = Math.min(summary.trackingCookies * 3, 30);
-        if (trackingCookiePenalty > 0) {
-            score -= trackingCookiePenalty;
-            this.factors.push({
-                type: 'negative',
-                description: `${summary.trackingCookies} tracking cookies detected`,
-                impact: -trackingCookiePenalty
-            });
-        }
+        // tracking requests used ONLY for scoring (not all third-party)
+        const trackingRequests = this.data.networkRequests?.tracking?.length || 0;
 
-        // Deduct points for third-party cookies (max -20 points)
-        const thirdPartyCookiePenalty = Math.min(summary.thirdPartyCookies * 2, 20);
-        if (thirdPartyCookiePenalty > 0) {
-            score -= thirdPartyCookiePenalty;
-            this.factors.push({
-                type: 'negative',
-                description: `${summary.thirdPartyCookies} third-party cookies detected`,
-                impact: -thirdPartyCookiePenalty
-            });
-        }
+        // third-party total (display only)
+        const totalRequests = this.data.networkRequests?.thirdParty?.length || 0;
 
-        // Deduct points for tracking scripts (max -25 points)
-        const trackingScriptPenalty = Math.min(summary.trackingScripts * 2, 25);
-        if (trackingScriptPenalty > 0) {
-            score -= trackingScriptPenalty;
-            this.factors.push({
-                type: 'negative',
-                description: `${summary.trackingScripts} tracking scripts detected`,
-                impact: -trackingScriptPenalty
-            });
-        }
+        const cookies = this.data.cookies?.tracking?.length || 0;
+        const policyFound = !!this.data.privacyPolicy?.found;
 
-        // Deduct points for third-party requests (max -15 points)
-        const thirdPartyRequestPenalty = Math.min(summary.thirdPartyRequests / 10, 15);
-        if (thirdPartyRequestPenalty > 0) {
-            score -= thirdPartyRequestPenalty;
-            this.factors.push({
-                type: 'negative',
-                description: `${summary.thirdPartyRequests} third-party requests detected`,
-                impact: -thirdPartyRequestPenalty
-            });
-        }
+        // --------------------------
+        // Stable Penalty Buckets
+        // --------------------------
 
-        // Add points for privacy policy (max +10 points)
-        if (summary.privacyPolicyFound) {
-            score += 10;
-            this.factors.push({
-                type: 'positive',
-                description: 'Privacy policy found',
-                impact: 10
-            });
-        } else {
-            this.factors.push({
-                type: 'negative',
-                description: 'No privacy policy detected',
-                impact: 0
-            });
-        }
+        const scriptPenalty = this.bucket(scripts, [
+            { min: 0, max: 0, penalty: 0 },
+            { min: 1, max: 3, penalty: 4 },
+            { min: 4, max: 10, penalty: 8 },
+            { min: 11, max: 20, penalty: 15 },
+            { min: 21, max: Infinity, penalty: 25 }
+        ]);
 
-        // Ensure score is between 0 and 100
-        this.score = Math.max(0, Math.min(100, score));
+        const requestPenalty = this.bucket(trackingRequests, [
+            { min: 0, max: 0, penalty: 0 },
+            { min: 1, max: 20, penalty: 2 },
+            { min: 21, max: 60, penalty: 5 },
+            { min: 61, max: 150, penalty: 12 },
+            { min: 151, max: Infinity, penalty: 20 }
+        ]);
 
-        // Determine rating
-        this.rating = this.getRating(this.score);
+        const cookiePenalty = this.bucket(cookies, [
+            { min: 0, max: 0, penalty: 0 },
+            { min: 1, max: 3, penalty: 2 },
+            { min: 4, max: 10, penalty: 5 },
+            { min: 11, max: 20, penalty: 10 },
+            { min: 21, max: Infinity, penalty: 20 }
+        ]);
 
-        // Generate recommendations
-        this.generateRecommendations(summary);
-    }
+        const policyPenalty = policyFound ? 0 : 10;
 
-    /**
-     * Get rating category based on score
-     */
-    getRating(score) {
-        if (score >= 80) return 'Excellent';
-        if (score >= 60) return 'Good';
-        if (score >= 40) return 'Fair';
-        if (score >= 20) return 'Poor';
-        return 'Very Poor';
-    }
+        // --------------------------
+        // Final Score Calculation
+        // --------------------------
+        const totalPenalty =
+            scriptPenalty + requestPenalty + cookiePenalty + policyPenalty;
 
-    /**
-     * Generate privacy recommendations
-     */
-    generateRecommendations(summary) {
+        this.score = Math.max(0, 100 - totalPenalty);
+
+        if (this.score >= 85) this.rating = "Excellent";
+        else if (this.score >= 70) this.rating = "Good";
+        else if (this.score >= 55) this.rating = "Fair";
+        else if (this.score >= 40) this.rating = "Poor";
+        else this.rating = "Very Poor";
+
+        // --------------------------
+        // For breakdown UI
+        // --------------------------
+        this.factors = {
+            scripts,
+            trackingRequests,
+            totalRequests,
+            cookies,
+            policyFound,
+            scriptPenalty,
+            requestPenalty,
+            cookiePenalty,
+            policyPenalty,
+            totalPenalty
+        };
+
+        // --------------------------
+        // Recommendations
+        // --------------------------
         this.recommendations = [];
 
-        if (summary.trackingCookies > 0) {
+        if (scripts > 3) {
             this.recommendations.push({
-                priority: 'high',
-                action: 'Consider blocking tracking cookies',
-                description: `${summary.trackingCookies} tracking cookies are being set`
+                action: "Use a script blocker",
+                description: `${scripts} tracking scripts detected`,
+                priority: "high"
             });
         }
 
-        if (summary.thirdPartyCookies > 0) {
+        if (!policyFound) {
             this.recommendations.push({
-                priority: 'medium',
-                action: 'Review third-party cookie usage',
-                description: `${summary.thirdPartyCookies} third-party cookies detected`
+                action: "No privacy policy found",
+                description: "Site does not expose a privacy policy",
+                priority: "medium"
             });
         }
 
-        if (summary.trackingScripts > 5) {
+        if (trackingRequests > 60) {
             this.recommendations.push({
-                priority: 'high',
-                action: 'Use a script blocker',
-                description: `${summary.trackingScripts} tracking scripts detected`
+                action: "High tracking activity",
+                description: `${trackingRequests} tracking-related requests detected`,
+                priority: "medium"
             });
         }
 
-        if (!summary.privacyPolicyFound) {
-            this.recommendations.push({
-                priority: 'medium',
-                action: 'No privacy policy found',
-                description: 'Consider reviewing privacy practices before sharing data'
-            });
-        }
-
-        if (summary.thirdPartyRequests > 20) {
-            this.recommendations.push({
-                priority: 'medium',
-                action: 'High number of third-party requests',
-                description: `${summary.thirdPartyRequests} third-party requests detected`
-            });
-        }
-    }
-
-    /**
-     * Get color for score display
-     */
-    getScoreColor() {
-        if (this.score >= 80) return '#10b981'; // green
-        if (this.score >= 60) return '#3b82f6'; // blue
-        if (this.score >= 40) return '#f59e0b'; // yellow
-        if (this.score >= 20) return '#ef4444'; // red
-        return '#dc2626'; // dark red
-    }
-
-    /**
-     * Get formatted score display
-     */
-    getFormattedScore() {
-        return Math.round(this.score);
+        return this.score;
     }
 }
-

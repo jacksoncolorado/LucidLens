@@ -160,6 +160,15 @@ export class PrivacyDataController {
     }
 
     /**
+     * Set privacy policy info from external detection (e.g., content script)
+     */
+    setPrivacyPolicy(url, summary = null) {
+        if (!this.currentPrivacyData) return;
+        this.currentPrivacyData.setPrivacyPolicy(url, summary);
+    }
+
+
+    /**
      * Get current privacy data
      */
     getCurrentPrivacyData() {
@@ -177,6 +186,13 @@ export class PrivacyDataController {
             ...this.currentPrivacyData,
             timestamp: Date.now()
         });
+    }
+
+    notifyUpdate() {
+        chrome.runtime.sendMessage({
+            type: "privacyData:updated",
+            summary: this.currentPrivacyData.getSummary()
+        }).catch(() => {});
     }
 
     /**

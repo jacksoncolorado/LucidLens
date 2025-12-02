@@ -40,6 +40,18 @@ export class PrivacyData {
         };
     }
 
+
+    notifyUpdate() {
+        try {
+            chrome.runtime.sendMessage({
+                type: "privacyData:updated",
+                summary: this.getSummary()
+            });
+        } catch (e) {
+            // ignore errors from closed popups
+        }
+    }
+
     /**
      * Add a cookie to the appropriate category
      */
@@ -69,7 +81,11 @@ export class PrivacyData {
         if (!cookie.expirationDate) {
             this.cookies.session.push(cookieData);
         }
+
+        // 🔥 notify popup
+        this.notifyUpdate();
     }
+
 
     /**
      * Add storage item
@@ -95,7 +111,7 @@ export class PrivacyData {
 
         this.tracking.scripts.push(scriptData);
 
-        // Categorize further
+        // Further categorization
         if (this.isAnalyticsScript(scriptUrl)) {
             this.tracking.analytics.push(scriptData);
         } else if (this.isSocialMediaScript(scriptUrl)) {
@@ -105,7 +121,11 @@ export class PrivacyData {
         } else if (this.isTrackingPixel(scriptUrl)) {
             this.tracking.pixels.push(scriptData);
         }
+
+        // 🔥 notify popup
+        this.notifyUpdate();
     }
+
 
     /**
      * Add network request
@@ -130,7 +150,11 @@ export class PrivacyData {
         if (this.isDataBroker(requestUrl)) {
             this.networkRequests.dataBrokers.push(requestData);
         }
+
+        // 🔥 notify popup
+        this.notifyUpdate();
     }
+
 
     /**
      * Set privacy policy information
@@ -142,7 +166,11 @@ export class PrivacyData {
             summary,
             timestamp: Date.now()
         };
-    }
+
+        // 🔥 notify popup
+        this.notifyUpdate();
+    }   
+
 
     /**
      * Get total count of tracking elements

@@ -1,10 +1,11 @@
 <script>
-    import { onMount } from "svelte";
+    import { onMount, onDestroy } from "svelte";
     import PopupController from "../controllers/PopupController.js";
     import Header from "./components/Header.svelte";
     import UrlDisplay from "./components/UrlDisplay.svelte";
     import PrivacyScore from "./components/PrivacyScore.svelte";
     import DataCollectionSummary from "./components/DataCollectionSummary.svelte";
+    import ScoreBreakdown from "./components/ScoreBreakdown.svelte";
 
     let info = {
         fullUrl: null,
@@ -19,37 +20,42 @@
     let loading = true;
     let privacyDataModel = null;
 
+    function handleUpdate(msg) {
+        if (msg?.type === "privacyData:updated" && privacyDataModel) {
+            privacyDataModel = {
+                ...privacyDataModel,
+                getSummary: () => msg.summary
+            };
+        }
+    }
+
+    onMount(() => {
+        chrome.runtime.onMessage.addListener(handleUpdate);
+        load();
+    });
+
+    onDestroy(() => {
+        chrome.runtime.onMessage.removeListener(handleUpdate);
+    });
+
     async function load() {
         loading = true;
         try {
             const data = await PopupController.loadWebsiteInfo();
             info = data;
-            
-            // Create PrivacyData model from response if available
+
             if (data.privacyData) {
-                // Reconstruct privacy data for display
                 privacyDataModel = {
-                    getSummary: () => data.privacyData.summary || {
-                        totalCookies: data.privacyData.cookies?.total || 0,
-                        thirdPartyCookies: data.privacyData.cookies?.thirdParty || 0,
-                        trackingCookies: data.privacyData.cookies?.tracking || 0,
-                        storageItems: 0,
-                        trackingScripts: data.privacyData.tracking?.scripts || 0,
-                        thirdPartyRequests: 0,
-                        trackingRequests: data.privacyData.tracking?.requests || 0,
-                        privacyPolicyFound: data.privacyData.privacyPolicy?.found || false
-                    }
+                    getSummary: () => data.privacyData.summary
                 };
             }
-        } catch (error) {
-            console.error("Error loading website info:", error);
+        } catch (err) {
+            console.error("Error loading website info:", err);
             info.message = "Error loading website information";
         } finally {
             loading = false;
         }
     }
-
-    onMount(load);
 </script>
 
 <div class="popup-container">
@@ -79,6 +85,13 @@
                  info.privacyScore >= 60 ? "#3b82f6" : 
                  info.privacyScore >= 40 ? "#f59e0b" : "#ef4444") : "#666"}
         />
+        {#if info.privacyScoreDetails?.factors}
+            <ScoreBreakdown
+            factors={info.privacyScoreDetails.factors}
+            score={info.privacyScoreDetails.score}
+            />
+        {/if}
+
 
         {#if info.privacyData}
             <DataCollectionSummary privacyData={privacyDataModel} />

@@ -217,8 +217,108 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 // =======================================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+
+  // --- Privacy policy detected by content script ---
+  if (message?.type === "privacyPolicy:detected") {
+    const firstUrl = message.urls?.[0];
+    if (firstUrl && privacyDataController) {
+      privacyDataController.setPrivacyPolicy(firstUrl);
+    }
+    return; // no async response needed
+  }
+
+  // --- Popup requesting data ---
   if (message?.type === "popup:ready") {
-    handlePopupReady(sendResponse);
-    return true; // keep message channel open for async response
+
+    // --- WAIT + RETRY MECHANISM ---
+    const MAX_RETRIES = 5;
+    let attempts = 0;
+
+    const attemptResponse = async () => {
+      attempts++;
+
+      const info = await WebsiteController.processWebsite();
+
+      if (!info.fullUrl || !isValidUrl(info.fullUrl)) {
+        sendResponse({
+          fullUrl: info.fullUrl,
+          host: info.host,
+          isSecure: info.isSecure,
+          privacyScore: null,
+          privacyData: null,
+          privacyScoreDetails: null,
+          message: "Cannot analyze this page type"
+        });
+        return;
+      }
+
+      // Ensure controller initialized
+      if (!privacyDataController || currentUrl !== info.fullUrl) {
+        await initializePrivacyCollection(info.fullUrl);
+      }
+
+      // Delay to let network/DOM settle
+      await new Promise(r => setTimeout(r, 150));
+
+      let privacyData = privacyDataController?.getCurrentPrivacyData();
+
+      // Retry if missing key pieces
+      if (
+        attempts < MAX_RETRIES &&
+        (
+          !privacyData ||
+          !privacyData.privacyPolicy ||
+          privacyData.networkRequests.tracking.length === 0
+        )
+      ) {
+        return attemptResponse();
+      }
+
+      // --- Compute score ---
+      let privacyScore = null;
+      let details = null;
+
+      if (privacyData) {
+        const calc = new PrivacyScore(privacyData);
+        calc.calculate();
+        privacyScore = calc.score;
+        details = {
+          score: calc.score,
+          rating: calc.rating,
+          factors: calc.factors,
+          recommendations: calc.recommendations
+        };
+      }
+
+      sendResponse({
+        fullUrl: info.fullUrl,
+        host: info.host,
+        isSecure: info.isSecure,
+        privacyScore,
+        privacyData: privacyData ? {
+          summary: privacyData.getSummary(),
+          cookies: {
+            total:
+              privacyData.cookies.firstParty.length +
+              privacyData.cookies.thirdParty.length,
+            thirdParty: privacyData.cookies.thirdParty.length,
+            tracking: privacyData.cookies.tracking.length
+          },
+          tracking: {
+            scripts: privacyData.tracking.scripts.length,
+            requests: privacyData.networkRequests.tracking.length
+          },
+          privacyPolicy: privacyData.privacyPolicy
+        } : null,
+        privacyScoreDetails: details,
+        message: details?.recommendations?.[0]?.description ||
+          "Privacy check complete."
+      });
+    };
+
+    // Start first attempt
+    attemptResponse();
+
+    return true; // keep port open for async sendResponse()
   }
 });
