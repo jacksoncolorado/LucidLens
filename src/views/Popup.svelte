@@ -26,6 +26,11 @@
     let aiError = null;
 
     function handleUpdate(msg) {
+            if (msg?.type === "policyScrape:complete") {
+            if (info?.privacyData?.privacyPolicy) {
+                info.privacyData.privacyPolicy.url = msg.finalUrl;
+            }
+        }
         if (msg?.type === "privacyScore:updated") {
             info.privacyScore = msg.privacyScore;
             info.privacyScoreDetails = msg.privacyScoreDetails;
@@ -80,7 +85,7 @@
         }
     }
 
- async function generateSummary() {
+async function generateSummary() {
     aiLoading = true;
     aiSummary = null;
     aiError = null;
@@ -97,17 +102,25 @@
             privacyPolicy: info.privacyData?.privacyPolicy
         });
 
+        // 🔥 UPDATE SVELTE STATE WITH CANONICAL URL
+        if (result?.finalUrl && info?.privacyData?.privacyPolicy) {
+            console.log("[Popup] Updating displayed policy URL:", result.finalUrl);
+            info.privacyData.privacyPolicy.url = result.finalUrl;
+        }
+
         if (result.success) {
             aiSummary = result.summary;
         } else {
             aiError = result.summary || "Unknown AI error.";
         }
+
     } catch (err) {
         aiError = "Failed to generate summary.";
     } finally {
         aiLoading = false;
     }
 }
+
 
 </script>
 

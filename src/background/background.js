@@ -215,54 +215,99 @@ if (message?.type === "privacyPolicy:textScraped") {
 
 
 
-  // --- Request to auto-scrape policy page in background tab ---
+/// --- Request to auto-scrape policy page in background tab ---
 if (message?.type === "privacyPolicy:autoScrape") {
-  if (!message.url) return;
+    if (!message.url) return;
 
-  console.log("[BG] Auto-scrape requested for:", message.url);
+    console.log("[BG] Auto-scrape requested for:", message.url);
 
-  chrome.tabs.create({ url: message.url, active: false }, (tab) => {
-    if (!tab || !tab.id) {
-      console.warn("[BG] Failed to create tab for auto-scrape");
-      return;
-    }
-
-    console.log("[BG] Created background tab", tab.id, "for", message.url);
-
-    function handleUpdated(tabId, changeInfo, updatedTab) {
-      if (tabId !== tab.id) return;
-      if (changeInfo.status !== "complete") return;
-
-      console.log("[BG] Tab finished loading, injecting scraper into", updatedTab.url);
-      chrome.tabs.onUpdated.removeListener(handleUpdated);
-
-      // Inject policyScraper.js manually into this tab
-      chrome.scripting.executeScript(
-        {
-          target: { tabId: tab.id },
-          files: ["contentScripts/policyScraper.js"]
-        },
-        () => {
-          if (chrome.runtime.lastError) {
-            console.error("[BG] Injection error:", chrome.runtime.lastError.message);
-          } else {
-            console.log("[BG] policyScraper injected into tab", tab.id);
-          }
-
-          // Close after giving scraper time to run & send its message
-          setTimeout(() => {
-            console.log("[BG] Closing auto-scrape tab", tab.id);
-            chrome.tabs.remove(tab.id);
-          }, 4000);
+    chrome.tabs.create({ url: message.url, active: false }, (tab) => {
+        if (!tab || !tab.id) {
+            console.warn("[BG] Failed to create tab for auto-scrape");
+            return;
         }
-      );
-    }
 
-    chrome.tabs.onUpdated.addListener(handleUpdated);
-  });
+        const scraperTabId = tab.id;
+        console.log("[BG] Created background tab", scraperTabId);
 
-  return true; // keep service worker alive during async work
+        // Protect against duplicate events
+        let alreadyClosed = false;
+
+        function cleanClose() {
+            if (alreadyClosed) return;
+            alreadyClosed = true;
+
+            chrome.tabs.remove(scraperTabId, () => {
+                if (chrome.runtime.lastError) {
+                    // Ignore "no tab with id" errors
+                    return;
+                }
+            });
+        }
+
+        function handleUpdated(tabId, changeInfo) {
+            if (tabId !== scraperTabId) return;
+            if (changeInfo.status !== "complete") return;
+
+            chrome.tabs.onUpdated.removeListener(handleUpdated);
+            console.log("[BG] Tab finished loading -> injecting scraper");
+
+            chrome.scripting.executeScript(
+                {
+                    target: { tabId: scraperTabId },
+                    files: ["contentScripts/policyScraper.js"]
+                },
+                () => {
+                    if (chrome.runtime.lastError) {
+                        console.error("[BG] Injection error:", chrome.runtime.lastError.message);
+                        cleanClose();
+                        return;
+                    }
+
+                    console.log("[BG] policyScraper injected");
+                }
+            );
+
+            // Wait for scraper to send text
+            const listener = (msg) => {
+                if (msg?.type === "privacyPolicy:textScraped") {
+                    chrome.runtime.onMessage.removeListener(listener);
+
+                    console.log("[BG] Received scraped text for:", msg.policyUrl);
+
+                    // Store text
+                    chrome.storage.local.get("privacyPolicyTexts", (stored) => {
+                        const all = stored?.privacyPolicyTexts || {};
+                        all[msg.policyUrl] = msg.text;
+
+                        chrome.storage.local.set({ privacyPolicyTexts: all }, () => {
+                            console.log("[BG] Stored policy text.");
+
+                            // Notify popup
+                            chrome.runtime.sendMessage({
+                                type: "policyScrape:complete",
+                                finalUrl: msg.policyUrl
+                            });
+
+                            // Close tab safely
+                            cleanClose();
+                        });
+                    });
+                }
+            };
+
+            chrome.runtime.onMessage.addListener(listener);
+
+            // SAFETY CLOSE: If the scraper never responds, close the tab anyway.
+            setTimeout(cleanClose, 5000);
+        }
+
+        chrome.tabs.onUpdated.addListener(handleUpdated);
+    });
+
+    return true;
 }
+
 
   // --- Popup requesting data ---
   if (message?.type === "popup:ready") {

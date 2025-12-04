@@ -1,45 +1,49 @@
 // src/contentScripts/policyScraper.js
 
-console.log("[PolicyScraper] injected on", location.href);
+console.log("[PolicyScraper] Injected on:", location.href);
 
-function extractVisibleText() {
-    const walker = document.createTreeWalker(
-        document.body,
-        NodeFilter.SHOW_TEXT,
-        {
-            acceptNode(node) {
-                if (!node.parentElement) return NodeFilter.FILTER_REJECT;
-
-                const s = window.getComputedStyle(node.parentElement);
-                if (
-                    s.display === "none" ||
-                    s.visibility === "hidden" ||
-                    s.opacity === "0"
-                ) {
-                    return NodeFilter.FILTER_REJECT;
-                }
-                return NodeFilter.FILTER_ACCEPT;
-            }
-        }
-    );
-
+function extractAllText() {
     let text = "";
-    let node;
-    while ((node = walker.nextNode())) {
-        text += node.textContent + " ";
+
+    // 1. Visible text
+    if (document.body) {
+        text += document.body.innerText + "\n";
     }
-    return text.replace(/\s+/g, " ").trim();
+
+    // 2. JSON-LD structured data (common on major news sites)
+    document.querySelectorAll('script[type="application/ld+json"]').forEach(tag => {
+        try {
+            const json = JSON.parse(tag.textContent.trim());
+            text += "\n" + JSON.stringify(json);
+        } catch { }
+    });
+
+    // 3. Next.js (NYTimes, WBD, CNN variations)
+    const nextData = document.querySelector("#__NEXT_DATA__");
+    if (nextData) {
+        text += "\n" + nextData.textContent;
+    }
+
+    // 4. Script blocks containing policy content
+    document.querySelectorAll("script").forEach(tag => {
+        const content = tag.textContent.toLowerCase();
+        if (content.includes("privacy") || content.includes("policy")) {
+            text += "\n" + tag.textContent;
+        }
+    });
+
+    return text.trim();
 }
 
 try {
-    const text = extractVisibleText();
+    const text = extractAllText();
 
     chrome.runtime.sendMessage({
         type: "privacyPolicy:textScraped",
-        policyUrl: location.href,   // FULL URL KEY
+        policyUrl: location.href,
         text
     });
 
 } catch (err) {
-    console.error("Policy Scraper Error:", err);
+    console.error("[Policy Scraper Error]:", err);
 }
