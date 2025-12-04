@@ -41,15 +41,16 @@ export class PrivacyData {
     }
 
 
+    /**
+     * Notify that data has been updated
+     * Note: This is called by PrivacyData methods, but the controller
+     * should handle the actual update notification to trigger score recalculation
+     */
     notifyUpdate() {
-        try {
-            chrome.runtime.sendMessage({
-                type: "privacyData:updated",
-                summary: this.getSummary()
-            });
-        } catch (e) {
-            // ignore errors from closed popups
-        }
+        // PrivacyData methods call this, but the controller's notifyUpdate
+        // should be used instead to ensure score recalculation
+        // This method is kept for backward compatibility but may not be used
+        // if the controller properly handles updates
     }
 
     /**

@@ -216,13 +216,75 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 // Message Listener (must NOT be async in MV3)
 // =======================================================
 
+// -------------------------------------------------------
+// Calculate and send updated privacy score
+// -------------------------------------------------------
+async function calculateAndSendScoreUpdate() {
+  if (!privacyDataController) return;
+
+  const privacyData = privacyDataController.getCurrentPrivacyData();
+  if (!privacyData) return;
+
+  // Calculate updated score
+  const scoreCalculator = new PrivacyScore(privacyData);
+  scoreCalculator.calculate();
+
+  const scoreDetails = {
+    score: scoreCalculator.score,
+    rating: scoreCalculator.rating,
+    factors: scoreCalculator.factors,
+    recommendations: scoreCalculator.recommendations
+  };
+
+  // Send update to all popup instances
+  try {
+    chrome.runtime.sendMessage({
+      type: "privacyScore:updated",
+      privacyScore: scoreCalculator.score,
+      privacyScoreDetails: scoreDetails,
+      privacyData: {
+        summary: privacyData.getSummary(),
+        cookies: {
+          total: privacyData.cookies.firstParty.length + 
+                 privacyData.cookies.thirdParty.length,
+          thirdParty: privacyData.cookies.thirdParty.length,
+          tracking: privacyData.cookies.tracking.length
+        },
+        tracking: {
+          scripts: privacyData.tracking.scripts.length,
+          requests: privacyData.networkRequests.tracking.length
+        },
+        privacyPolicy: privacyData.privacyPolicy
+      }
+    }).catch(() => {
+      // Ignore errors if no popup is open
+    });
+  } catch (err) {
+    // Ignore errors
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+
+  // --- Privacy data updated - recalculate score ---
+  if (message?.type === "privacyData:updated") {
+    // Debounce score recalculation to avoid too many updates
+    if (calculateAndSendScoreUpdate.timeout) {
+      clearTimeout(calculateAndSendScoreUpdate.timeout);
+    }
+    calculateAndSendScoreUpdate.timeout = setTimeout(() => {
+      calculateAndSendScoreUpdate();
+    }, 300); // Wait 300ms for more data to accumulate
+    return; // no async response needed
+  }
 
   // --- Privacy policy detected by content script ---
   if (message?.type === "privacyPolicy:detected") {
     const firstUrl = message.urls?.[0];
     if (firstUrl && privacyDataController) {
       privacyDataController.setPrivacyPolicy(firstUrl);
+      // setPrivacyPolicy calls notifyUpdate(), which triggers privacyData:updated
+      // and will recalculate the score automatically
     }
     return; // no async response needed
   }

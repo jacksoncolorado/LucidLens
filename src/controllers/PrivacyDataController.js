@@ -50,12 +50,15 @@ export class PrivacyDataController {
         this.requestListener = (requestData) => {
             if (!this.currentPrivacyData) return;
 
+            let dataChanged = false;
+
             // Handle cookie detection
             if (requestData.type === 'cookie' && requestData.cookies) {
                 requestData.cookies.forEach(cookieString => {
                     const cookie = this.parseCookieString(cookieString);
                     if (cookie) {
                         this.currentPrivacyData.addCookie(cookie);
+                        dataChanged = true;
                     }
                 });
             }
@@ -63,6 +66,7 @@ export class PrivacyDataController {
             // Handle tracking scripts
             if (requestData.type === 'script' && requestData.isTracking) {
                 this.currentPrivacyData.addTrackingScript(requestData.url, 'script');
+                dataChanged = true;
             }
 
             // Handle network requests
@@ -71,6 +75,18 @@ export class PrivacyDataController {
                     requestData.url,
                     requestData.isThirdParty
                 );
+                dataChanged = true;
+            }
+
+            // Notify update through controller (which triggers score recalculation)
+            if (dataChanged) {
+                // Use a small debounce to batch multiple rapid updates
+                if (this.updateTimeout) {
+                    clearTimeout(this.updateTimeout);
+                }
+                this.updateTimeout = setTimeout(() => {
+                    this.notifyUpdate();
+                }, 200);
             }
         };
 
@@ -103,11 +119,16 @@ export class PrivacyDataController {
             const parentDomain = `.${domain}`;
             const parentCookies = await chrome.cookies.getAll({ domain: parentDomain });
 
-            // Combine and add to PrivacyData
-            const allCookies = [...cookies, ...parentCookies];
-            allCookies.forEach(cookie => {
-                this.currentPrivacyData.addCookie(cookie);
-            });
+        // Combine and add to PrivacyData
+        const allCookies = [...cookies, ...parentCookies];
+        allCookies.forEach(cookie => {
+            this.currentPrivacyData.addCookie(cookie);
+        });
+        
+        // Notify update after initial cookie collection
+        if (allCookies.length > 0) {
+            this.notifyUpdate();
+        }
         } catch (error) {
             console.error('Error collecting cookies:', error);
         }
@@ -165,6 +186,8 @@ export class PrivacyDataController {
     setPrivacyPolicy(url, summary = null) {
         if (!this.currentPrivacyData) return;
         this.currentPrivacyData.setPrivacyPolicy(url, summary);
+        // Notify update after policy is set
+        this.notifyUpdate();
     }
 
 
@@ -188,10 +211,30 @@ export class PrivacyDataController {
         });
     }
 
+    /**
+     * Notify that privacy data has been updated and trigger score recalculation
+     */
     notifyUpdate() {
+        if (!this.currentPrivacyData) return;
+        
+        // Send update message with summary and trigger score recalculation
         chrome.runtime.sendMessage({
             type: "privacyData:updated",
-            summary: this.currentPrivacyData.getSummary()
+            summary: this.currentPrivacyData.getSummary(),
+            privacyData: {
+                summary: this.currentPrivacyData.getSummary(),
+                cookies: {
+                    total: this.currentPrivacyData.cookies.firstParty.length + 
+                           this.currentPrivacyData.cookies.thirdParty.length,
+                    thirdParty: this.currentPrivacyData.cookies.thirdParty.length,
+                    tracking: this.currentPrivacyData.cookies.tracking.length
+                },
+                tracking: {
+                    scripts: this.currentPrivacyData.tracking.scripts.length,
+                    requests: this.currentPrivacyData.networkRequests.tracking.length
+                },
+                privacyPolicy: this.currentPrivacyData.privacyPolicy
+            }
         }).catch(() => {});
     }
 

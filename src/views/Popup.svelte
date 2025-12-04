@@ -21,11 +21,30 @@
     let privacyDataModel = null;
 
     function handleUpdate(msg) {
-        if (msg?.type === "privacyData:updated" && privacyDataModel) {
+        // Handle privacy score updates (includes data and score)
+        if (msg?.type === "privacyScore:updated") {
+            // Update score and score details
+            info.privacyScore = msg.privacyScore;
+            info.privacyScoreDetails = msg.privacyScoreDetails;
+            
+            // Update privacy data
+            if (msg.privacyData) {
+                info.privacyData = msg.privacyData;
+                privacyDataModel = {
+                    getSummary: () => msg.privacyData.summary
+                };
+            }
+        }
+        // Handle privacy data updates (legacy, for backward compatibility)
+        else if (msg?.type === "privacyData:updated" && privacyDataModel) {
             privacyDataModel = {
                 ...privacyDataModel,
                 getSummary: () => msg.summary
             };
+            // Also update privacyData if provided
+            if (msg.privacyData) {
+                info.privacyData = msg.privacyData;
+            }
         }
     }
 
