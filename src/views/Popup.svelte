@@ -20,28 +20,28 @@
     let loading = true;
     let privacyDataModel = null;
 
+    // AI Summary State
+    let aiLoading = false;
+    let aiSummary = null;
+    let aiError = null;
+
     function handleUpdate(msg) {
-        // Handle privacy score updates (includes data and score)
         if (msg?.type === "privacyScore:updated") {
-            // Update score and score details
             info.privacyScore = msg.privacyScore;
             info.privacyScoreDetails = msg.privacyScoreDetails;
-            
-            // Update privacy data
+
             if (msg.privacyData) {
                 info.privacyData = msg.privacyData;
                 privacyDataModel = {
                     getSummary: () => msg.privacyData.summary
                 };
             }
-        }
-        // Handle privacy data updates (legacy, for backward compatibility)
-        else if (msg?.type === "privacyData:updated" && privacyDataModel) {
+        } else if (msg?.type === "privacyData:updated" && privacyDataModel) {
             privacyDataModel = {
                 ...privacyDataModel,
                 getSummary: () => msg.summary
             };
-            // Also update privacyData if provided
+
             if (msg.privacyData) {
                 info.privacyData = msg.privacyData;
             }
@@ -59,6 +59,10 @@
 
     async function load() {
         loading = true;
+        aiSummary = null;
+        aiError = null;
+        aiLoading = false;
+
         try {
             const data = await PopupController.loadWebsiteInfo();
             info = data;
@@ -75,6 +79,36 @@
             loading = false;
         }
     }
+
+ async function generateSummary() {
+    aiLoading = true;
+    aiSummary = null;
+    aiError = null;
+
+    try {
+        console.log("DEBUG PRIVACY POLICY:", info.privacyData?.privacyPolicy);
+
+        const result = await PopupController.generateAISummary({
+            fullUrl: info.fullUrl,
+            host: info.host,
+            privacyScore: info.privacyScore,
+            cookies: info.privacyData?.cookies,
+            tracking: info.privacyData?.tracking,
+            privacyPolicy: info.privacyData?.privacyPolicy
+        });
+
+        if (result.success) {
+            aiSummary = result.summary;
+        } else {
+            aiError = result.summary || "Unknown AI error.";
+        }
+    } catch (err) {
+        aiError = "Failed to generate summary.";
+    } finally {
+        aiLoading = false;
+    }
+}
+
 </script>
 
 <div class="popup-container">
@@ -84,11 +118,13 @@
         <div class="loading-state">
             <p class="loading-text">Loading...</p>
         </div>
+
     {:else if !info.fullUrl}
         <div class="error-state">
             <p class="error-text">{info.message || "Cannot analyze this page"}</p>
             <p class="error-hint">Navigate to a website to see privacy information.</p>
         </div>
+
     {:else}
         <UrlDisplay 
             url={info.fullUrl} 
@@ -99,24 +135,26 @@
         <PrivacyScore 
             score={info.privacyScore} 
             rating={info.privacyScoreDetails?.rating || "Unknown"}
-            color={info.privacyScoreDetails ? 
-                (info.privacyScore >= 80 ? "#10b981" : 
-                 info.privacyScore >= 60 ? "#3b82f6" : 
-                 info.privacyScore >= 40 ? "#f59e0b" : "#ef4444") : "#666"}
+            color={info.privacyScoreDetails 
+                ? (info.privacyScore >= 80 ? "#10b981" 
+                : info.privacyScore >= 60 ? "#3b82f6" 
+                : info.privacyScore >= 40 ? "#f59e0b" 
+                : "#ef4444") 
+                : "#666"}
         />
+
         {#if info.privacyScoreDetails?.factors}
             <ScoreBreakdown
-            factors={info.privacyScoreDetails.factors}
-            score={info.privacyScoreDetails.score}
+                factors={info.privacyScoreDetails.factors}
+                score={info.privacyScoreDetails.score}
             />
         {/if}
-
 
         {#if info.privacyData}
             <DataCollectionSummary privacyData={privacyDataModel} />
         {/if}
 
-        {#if info.privacyScoreDetails?.recommendations && info.privacyScoreDetails.recommendations.length > 0}
+        {#if info.privacyScoreDetails?.recommendations?.length > 0}
             <div class="recommendations">
                 <div class="recommendations-header">
                     <span class="label">Recommendations</span>
@@ -138,6 +176,7 @@
                     <span class="label">Privacy Policy</span>
                     <span class="policy-status success">Found</span>
                 </div>
+
                 {#if info.privacyData.privacyPolicy.url}
                     <a 
                         href={info.privacyData.privacyPolicy.url} 
@@ -150,154 +189,205 @@
             </div>
         {/if}
 
+        <button class="ai-btn" on:click={generateSummary} disabled={aiLoading}>
+            {#if aiLoading}
+                Analyzing...
+            {:else}
+                Generate AI Privacy Summary
+            {/if}
+        </button>
+
+        {#if aiSummary}
+            <details class="ai-summary">
+                <summary>AI Privacy Summary</summary>
+                <div class="ai-content">
+                    {@html aiSummary.replace(/\n/g, "<br>")}
+                </div>
+            </details>
+        {/if}
+
+        {#if aiError}
+            <div class="ai-error">{aiError}</div>
+        {/if}
+
         <button class="refresh-btn" on:click={load}>Refresh</button>
     {/if}
 </div>
 
 <style>
-    .popup-container {
-        background: #0d0d0f;
-        border-radius: 10px;
-        padding: 20px;
-        width: 380px;
-        max-height: 600px;
-        overflow-y: auto;
-        box-shadow: 0 0 15px rgba(0, 132, 255, 0.5);
-        border: 1px solid #1a1a1a;
-    }
+.popup-container {
+    background: #0d0d0f;
+    border-radius: 10px;
+    padding: 20px;
+    width: 380px;
+    max-height: 600px;
+    overflow-y: auto;
+    box-shadow: 0 0 15px rgba(0, 132, 255, 0.5);
+    border: 1px solid #1a1a1a;
+}
 
-    .loading-state, .error-state {
-        padding: 20px;
-        text-align: center;
-    }
+/* Recommendations block (restored) */
+.recommendations {
+    margin-top: 16px;
+    margin-bottom: 16px;
+    background: #1a1a1a;
+    border-radius: 8px;
+    border: 1px solid #2a2a2a;
+    overflow: hidden;
+}
 
-    .loading-text, .error-text {
-        color: #e6e6e6;
-        font-size: 0.95rem;
-        margin-bottom: 8px;
-    }
+.recommendations-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid #2a2a2a;
+}
 
-    .error-hint {
-        color: #999;
-        font-size: 0.85rem;
-    }
+.label {
+    font-weight: 600;
+    color: #66b3ff;
+    font-size: 0.9rem;
+}
 
-    .recommendations {
-        margin-top: 16px;
-        margin-bottom: 16px;
-        background: #1a1a1a;
-        border-radius: 8px;
-        border: 1px solid #2a2a2a;
-        overflow: hidden;
-    }
+.recommendations-list {
+    padding: 8px 16px;
+}
 
-    .recommendations-header {
-        padding: 12px 16px;
-        border-bottom: 1px solid #2a2a2a;
-    }
+.recommendation-item {
+    padding: 10px 0;
+    border-bottom: 1px solid #252525;
+}
 
-    .label {
-        font-weight: 600;
-        color: #66b3ff;
-        font-size: 0.9rem;
-    }
+.recommendation-item:last-child {
+    border-bottom: none;
+}
 
-    .recommendations-list {
-        padding: 8px 16px;
-    }
+.rec-action {
+    display: block;
+    color: #e6e6e6 !important;
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+}
 
-    .recommendation-item {
-        padding: 10px 0;
-        border-bottom: 1px solid #252525;
-    }
+.rec-description {
+    display: block;
+    color: #cccccc !important;
+    font-size: 0.8rem;
+}
 
-    .recommendation-item:last-child {
-        border-bottom: none;
-    }
+.recommendation-item.priority-high .rec-action {
+    color: #ef4444;
+}
 
-    .rec-action {
-        display: block;
-        color: #e6e6e6;
-        font-weight: 600;
-        font-size: 0.85rem;
-        margin-bottom: 4px;
-    }
+.recommendation-item.priority-medium .rec-action {
+    color: #f59e0b;
+}
 
-    .rec-description {
-        display: block;
-        color: #999;
-        font-size: 0.8rem;
-    }
+/* AI button + summary */
+.ai-btn {
+    width: 100%;
+    margin-top: 14px;
+    background: #0084ff;
+    padding: 10px 16px;
+    color: white;
+    border-radius: 6px;
+    border: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+}
 
-    .recommendation-item.priority-high .rec-action {
-        color: #ef4444;
-    }
+.ai-btn:hover {
+    background: #0a93ff;
+}
 
-    .recommendation-item.priority-medium .rec-action {
-        color: #f59e0b;
-    }
+.ai-btn:disabled {
+    background: #2a2a2a;
+    cursor: not-allowed;
+}
 
-    .privacy-policy {
-        margin-top: 16px;
-        margin-bottom: 16px;
-        padding: 12px 16px;
-        background: #1a1a1a;
-        border-radius: 8px;
-        border: 1px solid #2a2a2a;
-    }
+.ai-summary {
+    margin-top: 14px;
+    background: #1a1a1a;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid #333;
+}
 
-    .policy-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 8px;
-    }
+.ai-summary summary {
+    color: #66b3ff;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
 
-    .policy-status {
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 0.75rem;
-        font-weight: 600;
-    }
+.ai-content {
+    margin-top: 8px;
+    color: #ddd;
+    font-size: 0.85rem;
+    line-height: 1.25rem;
+}
 
-    .policy-status.success {
-        background: rgba(16, 185, 129, 0.1);
-        color: #10b981;
-        border: 1px solid #10b981;
-    }
+.ai-error {
+    color: #ff6b6b;
+    margin-top: 8px;
+    text-align: center;
+    font-size: 0.85rem;
+}
 
-    .policy-link {
-        display: block;
-        color: #66b3ff;
-        text-decoration: none;
-        font-size: 0.85rem;
-        margin-top: 8px;
-        transition: color 0.2s;
-    }
+/* Privacy policy card */
+.privacy-policy {
+    margin-top: 16px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: #1a1a1a;
+    border-radius: 8px;
+    border: 1px solid #2a2a2a;
+}
 
-    .policy-link:hover {
-        color: #99ccff;
-    }
+.policy-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
 
-    .refresh-btn {
-        width: 100%;
-        margin-top: 16px;
-        background: #0084ff;
-        padding: 10px 16px;
-        color: white;
-        border-radius: 6px;
-        border: none;
-        font-size: 0.9rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background 0.2s;
-    }
+.policy-status {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
 
-    .refresh-btn:hover {
-        background: #0a93ff;
-    }
+.policy-status.success {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border: 1px solid #10b981;
+}
 
-    .refresh-btn:active {
-        background: #0066cc;
-    }
+.policy-link {
+    color: #66b3ff;
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+.policy-link:hover {
+    color: #99ccff;
+}
+
+/* Refresh button */
+.refresh-btn {
+    width: 100%;
+    margin-top: 16px;
+    background: #0084ff;
+    padding: 10px 16px;
+    color: white;
+    border-radius: 6px;
+    border: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.refresh-btn:hover {
+    background: #0a93ff;
+}
 </style>

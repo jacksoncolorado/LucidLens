@@ -2,7 +2,7 @@
 
 import { PrivacyData } from '../models/PrivacyData.js';
 import { WebRequestService } from '../services/WebRequestService.js';
-import { PrivacyPolicyService } from '../services/PrivacyPolicyService.js';
+import PrivacyPolicyService from '../services/PrivacyPolicyService.js';
 import { StorageService } from '../services/StorageService.js';
 import { CONSTANTS } from '../utils/constants.js';
 
@@ -27,17 +27,13 @@ export class PrivacyDataController {
         // Start monitoring network requests
         this.startMonitoring();
 
-        // Detect privacy policy
-        const policyUrl = await this.privacyPolicyService.detectPrivacyPolicy(url);
-        if (policyUrl) {
-            this.currentPrivacyData.setPrivacyPolicy(policyUrl);
-        }
-
-        // Get existing cookies for the domain
+        // Removed detectPrivacyPolicy() call — content script handles policy detection
+        // Cookies still collected normally
         await this.collectCookies(url);
 
         return this.currentPrivacyData;
     }
+
 
     /**
      * Start monitoring network requests

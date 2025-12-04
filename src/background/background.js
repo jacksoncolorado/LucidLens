@@ -1,7 +1,7 @@
 // =======================================================
 // Background Service Worker (MV3-safe, Vite-compatible)
 // =======================================================
-import { analyzePrivacy } from "./xAIService.js";
+
 import { PrivacyDataController } from "../controllers/PrivacyDataController.js";
 import { PrivacyScore } from "../models/PrivacyScore.js";
 
@@ -95,98 +95,6 @@ function isValidUrl(url) {
 }
 
 // -------------------------------------------------------
-// Handle popup request (includes privacy data analysis)
-// -------------------------------------------------------
-async function handlePopupReady(sendResponse) {
-  try {
-    const info = await WebsiteController.processWebsite();
-
-    if (!info.fullUrl || !isValidUrl(info.fullUrl)) {
-      sendResponse({
-        fullUrl: info.fullUrl,
-        host: info.host,
-        isSecure: info.isSecure,
-        privacyScore: null,
-        privacyData: null,
-        privacyScoreDetails: null,
-        message: "Cannot analyze this page type"
-      });
-      return;
-    }
-
-    // Initialize or get privacy data
-    if (currentUrl !== info.fullUrl) {
-      await initializePrivacyCollection(info.fullUrl);
-    }
-
-    let privacyData = null;
-    let privacyScore = null;
-    let privacyScoreDetails = null;
-
-    if (privacyDataController) {
-      privacyData = privacyDataController.getCurrentPrivacyData();
-      
-      if (privacyData) {
-        // Calculate privacy score
-        const scoreCalculator = new PrivacyScore(privacyData);
-        scoreCalculator.calculate();
-        privacyScore = scoreCalculator.score;
-        privacyScoreDetails = {
-          score: scoreCalculator.score,
-          rating: scoreCalculator.rating,
-          factors: scoreCalculator.factors,
-          recommendations: scoreCalculator.recommendations
-        };
-      }
-    }
-
-    // Fallback to AI analysis if no privacy data collected yet
-    if (!privacyScore && info.fullUrl) {
-      try {
-        const ai = await analyzePrivacy(info.fullUrl);
-        privacyScore = ai.score;
-      } catch (err) {
-        console.warn("AI analysis failed, using default:", err);
-      }
-    }
-
-    sendResponse({
-      fullUrl: info.fullUrl,
-      host: info.host,
-      isSecure: info.isSecure,
-      privacyScore: privacyScore,
-      privacyData: privacyData ? {
-        summary: privacyData.getSummary(),
-        cookies: {
-          total: privacyData.cookies.firstParty.length + privacyData.cookies.thirdParty.length,
-          thirdParty: privacyData.cookies.thirdParty.length,
-          tracking: privacyData.cookies.tracking.length
-        },
-        tracking: {
-          scripts: privacyData.tracking.scripts.length,
-          requests: privacyData.networkRequests.tracking.length
-        },
-        privacyPolicy: privacyData.privacyPolicy
-      } : null,
-      privacyScoreDetails: privacyScoreDetails,
-      message: privacyScoreDetails?.recommendations?.[0]?.description || "Privacy check complete."
-    });
-
-  } catch (err) {
-    console.error("handlePopupReady error:", err);
-    sendResponse({
-      fullUrl: null,
-      host: null,
-      isSecure: false,
-      privacyScore: null,
-      privacyData: null,
-      privacyScoreDetails: null,
-      message: "Error retrieving website information"
-    });
-  }
-}
-
-// -------------------------------------------------------
 // Handle tab updates for SPA navigation
 // -------------------------------------------------------
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -211,10 +119,6 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     console.error("Tab activation error:", err);
   }
 });
-
-// =======================================================
-// Message Listener (must NOT be async in MV3)
-// =======================================================
 
 // -------------------------------------------------------
 // Calculate and send updated privacy score
@@ -264,6 +168,9 @@ async function calculateAndSendScoreUpdate() {
   }
 }
 
+// =======================================================
+// Message Listener (must NOT be async in MV3)
+// =======================================================
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // --- Privacy data updated - recalculate score ---
@@ -278,7 +185,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return; // no async response needed
   }
 
-  // --- Privacy policy detected by content script ---
+  // --- Privacy policy detected by content script (link scan) ---
   if (message?.type === "privacyPolicy:detected") {
     const firstUrl = message.urls?.[0];
     if (firstUrl && privacyDataController) {
@@ -288,6 +195,74 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     return; // no async response needed
   }
+
+  // --- Scraped policy text from policyScraper.js ---
+if (message?.type === "privacyPolicy:textScraped") {
+    const policyUrl = message.policyUrl;
+    const text = message.text;
+
+    chrome.storage.local.get("privacyPolicyTexts", (stored) => {
+        const all = stored?.privacyPolicyTexts || {};
+        all[policyUrl] = text;  // STORE BY FULL URL
+
+        chrome.storage.local.set({ privacyPolicyTexts: all }, () => {
+            console.log("Stored policy text for:", policyUrl);
+        });
+    });
+
+    return; 
+}
+
+
+
+  // --- Request to auto-scrape policy page in background tab ---
+if (message?.type === "privacyPolicy:autoScrape") {
+  if (!message.url) return;
+
+  console.log("[BG] Auto-scrape requested for:", message.url);
+
+  chrome.tabs.create({ url: message.url, active: false }, (tab) => {
+    if (!tab || !tab.id) {
+      console.warn("[BG] Failed to create tab for auto-scrape");
+      return;
+    }
+
+    console.log("[BG] Created background tab", tab.id, "for", message.url);
+
+    function handleUpdated(tabId, changeInfo, updatedTab) {
+      if (tabId !== tab.id) return;
+      if (changeInfo.status !== "complete") return;
+
+      console.log("[BG] Tab finished loading, injecting scraper into", updatedTab.url);
+      chrome.tabs.onUpdated.removeListener(handleUpdated);
+
+      // Inject policyScraper.js manually into this tab
+      chrome.scripting.executeScript(
+        {
+          target: { tabId: tab.id },
+          files: ["contentScripts/policyScraper.js"]
+        },
+        () => {
+          if (chrome.runtime.lastError) {
+            console.error("[BG] Injection error:", chrome.runtime.lastError.message);
+          } else {
+            console.log("[BG] policyScraper injected into tab", tab.id);
+          }
+
+          // Close after giving scraper time to run & send its message
+          setTimeout(() => {
+            console.log("[BG] Closing auto-scrape tab", tab.id);
+            chrome.tabs.remove(tab.id);
+          }, 4000);
+        }
+      );
+    }
+
+    chrome.tabs.onUpdated.addListener(handleUpdated);
+  });
+
+  return true; // keep service worker alive during async work
+}
 
   // --- Popup requesting data ---
   if (message?.type === "popup:ready") {
