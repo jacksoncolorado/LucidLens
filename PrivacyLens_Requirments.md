@@ -1,322 +1,309 @@
-# Privacy Lens - Web Extension Requirements Document
+# Privacy Lens – Web Extension Requirements Document
 
-## Project Overview
+============================================================
+PROJECT OVERVIEW
+============================================================
 
-**Project Name:** Privacy Lens  
-**Technology Stack:** Svelte + Tailwind CSS + View Model Controller Architecture  
-**Target Platform:** Chromium-based web browsers  
-**Project Type:** Browser Extension for Privacy Data Transparency  
+Project Name: Privacy Lens
+Technology Stack: Svelte + Vite + Manifest V3 + JavaScript
+Target Platform: Chromium-based browsers (Chrome, Edge, Brave)
+Project Type: Browser Extension for Privacy Data Transparency
 
-## Project Description
+============================================================
+PROJECT DESCRIPTION
+============================================================
 
-Privacy Lens is a web extension designed to provide users with transparent information about the privacy data being collected by websites they visit. The extension will display privacy-related information in an easy-to-understand format, similar to uBlock Origin's interface, helping users make informed decisions about their online privacy.
+Privacy Lens is a browser extension that analyzes how websites collect data. 
+It detects tracking scripts, cookies, third-party network requests, storage usage,
+and privacy policy availability, then presents results in a clear, user-friendly UI.
+The extension also provides an optional AI-generated privacy summary.
 
-## Architecture Overview
+The goal is to help users understand how a website behaves behind the scenes and
+to increase privacy transparency across the web.
 
-### Technology Stack
-- **Frontend Framework:** Svelte
-- **Styling:** Tailwind CSS
-- **Architecture Pattern:** View Model Controller (MVC)
-- **Browser Compatibility:** Chromium-based browsers (Chrome, Edge, Brave, etc.)
-- **Testing Framework:** Gherkin (Acceptance Tests) + Unit Tests
-- **Code Coverage Requirement:** Minimum 80%
+============================================================
+ARCHITECTURE OVERVIEW
+============================================================
 
-### File Structure (MVC Architecture)
-```
+Technology Stack:
+- Frontend: Svelte (UI components)
+- Build Tool: Vite
+- Architecture: Modular MVC-inspired structure
+- Browser Runtime: Manifest V3 Service Worker
+- Styling: Component-scoped Svelte CSS
+- AI Integration: External API (xAI)
+
+File Structure:
 src/
-├── models/           # Data models and business logic
-├── views/            # Svelte components and UI
-├── controllers/       # Application logic and coordination
-├── services/          # External API integrations
-├── utils/             # Utility functions
-└── tests/            # Test files
-```
+  models/        (PrivacyData, PrivacyScore, Website)
+  views/         (Svelte UI components)
+  controllers/   (PopupController, PrivacyDataController)
+  services/      (storage, browser API, webRequest, AI service)
+  background/    (background.js: main service worker)
+  contentScripts/ (tracking scanner + policy scraper)
+  popup/         (popup entry + main Svelte view)
+  utils/         (optional small helpers)
 
-## Core Requirements
+============================================================
+CORE REQUIREMENTS
+============================================================
 
-### 1. Website Detection
-**Priority:** Must Have  
-**Description:** The extension must automatically detect and identify the current website the user is visiting.
+------------------------------------------------------------
+1. Website Detection
+------------------------------------------------------------
+Priority: Must Have
 
-**Acceptance Criteria:**
-- Extension detects website changes in real-time
-- Works on all major website types (HTTP/HTTPS)
-- Handles single-page applications (SPAs) correctly
-- Maintains detection across browser tabs
+Description:
+The extension must automatically identify the website the user is visiting in real time.
 
-**Technical Requirements:**
-- Use `chrome.tabs.onUpdated` API for tab change detection
-- Implement URL parsing and validation
-- Handle edge cases (localhost, file://, chrome://)
+Acceptance Criteria:
+- Detect URL changes immediately
+- Work across HTTP and HTTPS
+- Handle SPAs (single-page applications)
+- Maintain correct state when switching tabs
 
-### 2. Display Current Web Address
-**Priority:** Must Have  
-**Description:** Dynamically display the current web page address in the extension popup.
+Technical Requirements:
+- Use chrome.tabs.onUpdated
+- Use chrome.tabs.onActivated
+- Ensure URL validation
+- Ignore special pages (chrome://, extension pages)
 
-**Acceptance Criteria:**
-- Shows full URL including protocol
-- Updates automatically when user navigates
-- Handles long URLs with appropriate truncation
-- Displays URL in a readable format
+------------------------------------------------------------
+2. Display Current Web Address
+------------------------------------------------------------
+Priority: Must Have
 
-**Technical Requirements:**
-- Use `chrome.tabs.query` to get active tab information
-- Implement URL formatting and display logic
-- Handle special characters and encoding
+Description:
+Show the full current URL in the popup with security indicator (HTTP/HTTPS).
 
-### 3. Gather and Display Collected Privacy Data
-**Priority:** Must Have  
-**Description:** Collect and display privacy-related data being gathered by the current website.
+Acceptance Criteria:
+- Display full URL with truncation when appropriate
+- Update automatically when user navigates
+- Show hostname and security status (lock icon)
 
-**Acceptance Criteria:**
-- Detects cookies being set by the website
-- Identifies tracking scripts and analytics tools
-- Shows data collection methods (localStorage, sessionStorage, etc.)
-- Displays third-party requests and data sharing
-- Presents information in an easy-to-read format similar to uBlock Origin
+Technical Requirements:
+- Retrieve active tab via chrome.tabs.query
+- Implement URL shortening logic
+- Handle invalid or unsupported URLs
 
-**Technical Requirements:**
-- Monitor network requests using `chrome.webRequest` API
-- Analyze DOM for tracking scripts and analytics
-- Detect cookie usage and storage mechanisms
-- Implement data categorization and classification
-- Create user-friendly data visualization
+------------------------------------------------------------
+3. Gather and Display Privacy Data
+------------------------------------------------------------
+Priority: Must Have
 
-**Data Categories to Track:**
-- Cookies (first-party and third-party)
-- Local Storage and Session Storage
-- Tracking pixels and analytics scripts
-- Social media widgets
-- Advertising networks
-- Data brokers and analytics companies
+Description:
+Collect privacy-impacting activity and display it in categories.
 
-### 4. Gather Site Policy Information
-**Priority:** Must Have  
-**Description:** Locate and display privacy policy information with summary and direct links.
+Acceptance Criteria:
+- Detect all tracking scripts on page
+- Detect network requests and classify them
+- Detect cookies set via response headers
+- Detect localStorage/sessionStorage usage
+- Provide categorized summaries and details
 
-**Acceptance Criteria:**
-- Automatically detect privacy policy links
-- Extract key privacy policy information
-- Provide direct links to full privacy policy
-- Display policy summary in user-friendly format
-- Handle cases where no privacy policy is found
+Technical Requirements:
+- Use chrome.webRequest for network analysis
+- Use contentScripts/privacyScanner.js for script detection
+- Detect cookies via headersReceived listener
+- Classify scripts by category and risk level
+- Categorize requests as first-party, third-party, tracking, data brokers
 
-**Technical Requirements:**
-- Implement web scraping for privacy policy detection
-- Use natural language processing for policy summarization
-- Cache policy information for performance
-- Handle various privacy policy formats and locations
+Data Categories:
+- Cookies (first/third-party, tracking, session)
+- LocalStorage/sessionStorage keys
+- Tracking scripts (analytics, fingerprinting, advertising, behavior tracking)
+- Third-party requests
+- Tracking-related requests
+- Data brokers and high-risk endpoints
 
-**Common Privacy Policy Locations:**
-- Footer links
-- Header navigation
-- Dedicated privacy pages
-- Terms of service sections
+------------------------------------------------------------
+4. Gather and Analyze Privacy Policy Information
+------------------------------------------------------------
+Priority: Must Have
 
-### 5. Provide Summary and Privacy Rating
-**Priority:** Must Have  
-**Description:** Generate a comprehensive summary and privacy rating based on collected data.
+Description:
+Locate, retrieve, and store privacy policy content to assist with transparency.
 
-**Acceptance Criteria:**
-- Calculate privacy score (0-100 scale)
-- Provide clear explanation of rating factors
-- Show data collection summary
-- Display privacy recommendations
-- Update rating in real-time as user navigates
+Acceptance Criteria:
+- Automatically detect privacy policy links on the page
+- Scrape full privacy policy text when loaded
+- Cache extracted policy text locally
+- Handle scenarios where no policy is found
 
-**Technical Requirements:**
-- Implement scoring algorithm based on data collection practices
-- Create rating categories (Excellent, Good, Fair, Poor, Very Poor)
-- Generate actionable privacy recommendations
-- Implement real-time rating updates
+Technical Requirements:
+- Use contentScripts/privacyScanner.js to detect links
+- Inject policyScraper.js into detected policy pages
+- Extract visible text, JSON-LD, and script metadata
+- Store results using chrome.storage.local
+- Account for modern frameworks (Next.js, React, etc.)
 
-**Rating Factors:**
-- Number of tracking cookies
-- Third-party data sharing
-- Data retention policies
-- User consent mechanisms
-- Data encryption practices
-- Privacy policy transparency
+------------------------------------------------------------
+5. Provide a Privacy Score and Summary
+------------------------------------------------------------
+Priority: Must Have
 
-## User Interface Requirements
+Description:
+Generate a numeric score and explanatory breakdown of website privacy posture.
 
-### Design Principles
-- **Simplicity:** Clean, uncluttered interface
-- **Accessibility:** Easy to understand for all user levels
-- **Consistency:** Similar to uBlock Origin's familiar interface
-- **Responsiveness:** Works across different screen sizes
-- **Performance:** Fast loading and smooth interactions
+Acceptance Criteria:
+- Score updates automatically based on data collected
+- Provide detailed breakdown of penalties
+- Show recommendations based on tracking activity
+- Include AI-generated summary when requested
 
-### UI Components
+Technical Requirements:
+- Implement scoring in PrivacyScore model
+- Score factors:
+    - Tracking scripts
+    - Tracking requests
+    - Tracking cookies
+    - Whether a privacy policy is available
+- Create rating categories:
+    Excellent, Good, Fair, Poor, Very Poor
+- Generate recommendations
+- Freeze data during AI summary generation to avoid UI flicker
 
-#### Main Popup Interface
-- **Header:** Extension logo and current website indicator
-- **URL Display:** Current website address with copy functionality
-- **Privacy Score:** Large, color-coded rating display
-- **Data Collection Summary:** Expandable list of tracked data
-- **Privacy Policy Section:** Summary with direct link
-- **Action Buttons:** Settings, detailed view, help
+============================================================
+USER INTERFACE REQUIREMENTS
+============================================================
 
-#### Detailed View
-- **Comprehensive Data List:** All detected tracking elements
-- **Category Breakdown:** Organized by data type
-- **Timeline:** When data was collected
-- **Recommendations:** Specific privacy actions
+Design Principles:
+- Simplicity: Clear, minimal UI
+- Accessibility: Understandable to non-technical users
+- Consistency: Structured Svelte components
+- Performance: Fast rendering and updates
+- Responsiveness: Handles varied content sizes gracefully
 
-#### Settings Panel
-- **Notification Preferences:** Alert settings for privacy changes
-- **Data Collection Preferences:** What to monitor
-- **Display Options:** UI customization
-- **Export Data:** Download privacy reports
+Main Popup Interface:
+- Header with extension name
+- URL display with HTTPS indicator
+- Privacy score circle + bar
+- Score breakdown component
+- Data collection summary (cookies, scripts, requests)
+- Recommendations section
+- Privacy policy link (if found)
+- AI summary section
+- Refresh and AI buttons
 
-## Technical Specifications
+Detailed Script View (TrackingScriptDetails):
+- Each script shows:
+  URL, category, risk, first vs third party, description.
 
-### Browser APIs Required
-- `chrome.tabs` - Tab management and URL detection
-- `chrome.webRequest` - Network request monitoring
-- `chrome.storage` - Local data persistence
-- `chrome.runtime` - Extension lifecycle management
-- `chrome.permissions` - Permission management
+============================================================
+TECHNICAL SPECIFICATIONS
+============================================================
 
-### Performance Requirements
-- **Load Time:** Extension popup opens within 500ms
-- **Memory Usage:** Maximum 50MB RAM usage
-- **CPU Usage:** Minimal impact on browser performance
-- **Storage:** Efficient data caching and cleanup
+Browser APIs:
+- chrome.tabs (URL detection)
+- chrome.webRequest (network request analysis)
+- chrome.storage (local data persistence)
+- chrome.runtime (messaging between scripts)
+- chrome.scripting (inject content scripts)
+- chrome.cookies (identify set-cookie headers)
 
-### Security Requirements
-- **Data Privacy:** No user data sent to external servers (except Grok API integration)
-- **Permissions:** Request minimal required permissions
-- **Content Security:** Implement CSP policies
-- **Data Encryption:** Encrypt sensitive stored data
+Performance Requirements:
+- Popup load time < 500ms
+- Minimal CPU use for background monitoring
+- Efficient data caching
+- Avoid duplicate scanning
 
-## Testing Requirements
+Security Requirements:
+- No user-identifying data stored
+- No external transmission of browsing history except:
+    - Optional AI summary mode (policy + tracking classification only)
+- CSP-compliant extension pages
+- API key must not be bundled in production builds
 
-### Test Coverage
-- **Minimum Code Coverage:** 80%
-- **Unit Tests:** All business logic and utility functions
-- **Integration Tests:** API interactions and data flow
-- **Acceptance Tests:** Gherkin scenarios for all features
-- **Manual Testing:** Cross-browser compatibility
+============================================================
+TESTING REQUIREMENTS
+============================================================
 
-### Gherkin Test Scenarios
+Testing Types:
+- Manual testing across multiple websites
+- Functional testing of scoring logic
+- Validation of script classification
+- Validation of privacy policy scraping
+- UI state testing (expanded/collapsed, load states)
 
-#### Website Detection
-```gherkin
-Feature: Website Detection
-  Scenario: Detect website change
-    Given the user is on "https://example.com"
-    When the user navigates to "https://google.com"
-    Then the extension should detect the new website
-    And display the new URL in the popup
-```
+Acceptance Guidelines:
+- Extension must correctly detect policies, scripts, cookies, and requests
+- Score must match expected values based on defined rules
+- Popup must reflect changes in real time
 
-#### Privacy Data Collection
-```gherkin
-Feature: Privacy Data Collection
-  Scenario: Detect tracking cookies
-    Given the user visits a website with tracking cookies
-    When the extension analyzes the page
-    Then it should identify all tracking cookies
-    And display them in the privacy data section
-```
+============================================================
+BACKLOG FEATURES (FUTURE WORK)
+============================================================
 
-#### Privacy Rating
-```gherkin
-Feature: Privacy Rating
-  Scenario: Calculate privacy score
-    Given a website with moderate tracking
-    When the extension analyzes privacy data
-    Then it should calculate a privacy score
-    And display the score with explanation
-```
+- User-defined risk tolerance settings
+- Blocking or warnings for high-risk trackers
+- Policy change detection (version comparison)
+- Exportable privacy reports
+- Light and dark theme modes
+- Fully local privacy policy summarization (no external API)
+- Machine-learning powered tracker classification
+- Ports for Firefox and Safari
 
-## Backlog Features
+============================================================
+DEVELOPMENT PHASES
+============================================================
 
-### Grok API Integration
-**Priority:** Future Enhancement  
-**Description:** Advanced AI-powered privacy analysis and summarization.
+Phase 1 – Foundation
+- Svelte + Vite setup
+- Manifest V3 configuration
+- Basic popup UI
+- Website detection
 
-**Requirements:**
-- Django backend for API management
-- Grok API integration for advanced analysis
-- Enhanced privacy recommendations
-- Natural language policy summarization
-- Advanced threat detection
+Phase 2 – Data Collection System
+- WebRequest monitoring
+- Tracking script classifier
+- Cookie and storage detection
+- Script risk engine
 
-**Technical Considerations:**
-- Secure API communication
-- Data anonymization before sending
-- Fallback mechanisms if API unavailable
-- User consent for data sharing
+Phase 3 – Scoring and Visualization
+- PrivacyScore engine
+- Score breakdown UI
+- Recommendations
 
-## Development Phases
+Phase 4 – Policy Integration
+- Policy detection
+- Policy scraping
+- Caching + text normalization
 
-### Phase 1: Core Foundation
-1. Set up Svelte + Tailwind CSS project structure
-2. Implement MVC architecture
-3. Create basic extension manifest and permissions
-4. Develop website detection functionality
+Phase 5 – AI Integration
+- External API request handler
+- Summary generation UI
+- Output cleanup and formatting
 
-### Phase 2: Data Collection
-1. Implement privacy data gathering
-2. Create data categorization system
-3. Develop UI components for data display
-4. Add privacy policy detection
+Phase 6 – Optimization and Stabilization
+- Performance tuning
+- UI polish
+- Error handling improvements
 
-### Phase 3: Rating System
-1. Implement privacy scoring algorithm
-2. Create rating display components
-3. Add summary generation
-4. Implement real-time updates
+============================================================
+SUCCESS CRITERIA
+============================================================
 
-### Phase 4: Testing & Optimization
-1. Write comprehensive test suite
-2. Achieve 80% code coverage
-3. Performance optimization
-4. Cross-browser testing
+Functional Success:
+- Website is fully analyzed within 1–2 seconds
+- Privacy score accurately reflects collected data
+- Policy scraping works on most major sites
+- AI summary produces readable output
 
-### Phase 5: Advanced Features
-1. Settings and customization
-2. Data export functionality
-3. Advanced UI features
-4. Grok API integration (if applicable)
+Performance Success:
+- Minimal performance impact on browsing
+- Popup remains responsive
+- Background script stable under heavy browsing
 
-## Success Criteria
+User Experience Success:
+- Clear and helpful presentation of privacy data
+- Recommendations understandable to non-experts
+- No unnecessary friction or confusion
 
-### Functional Requirements
-- ✅ All must-have features implemented and working
-- ✅ 80% code coverage achieved
-- ✅ All Gherkin acceptance tests passing
-- ✅ Cross-browser compatibility verified
+============================================================
+CONCLUSION
+============================================================
 
-### Performance Requirements
-- ✅ Extension loads within 500ms
-- ✅ Minimal impact on browser performance
-- ✅ Efficient memory usage
-- ✅ Smooth user interactions
+Privacy Lens provides users with a transparent view of website tracking and privacy practices. 
+Its combination of real-time analysis, structured scoring, and AI-assisted summaries makes privacy more understandable for everyday users.
 
-### User Experience Requirements
-- ✅ Intuitive interface similar to uBlock Origin
-- ✅ Clear privacy information display
-- ✅ Easy-to-understand privacy ratings
-- ✅ Accessible to users of all technical levels
-
-## Risk Assessment
-
-### Technical Risks
-- **Browser API Limitations:** Some privacy data may be inaccessible
-- **Performance Impact:** Extensive monitoring may slow browser
-- **Cross-browser Compatibility:** Different browsers may have API variations
-
-### Mitigation Strategies
-- Implement graceful degradation for unavailable APIs
-- Use efficient monitoring techniques
-- Extensive cross-browser testing
-- Progressive enhancement approach
-
-## Conclusion
-
-Privacy Lens aims to provide users with transparent, easy-to-understand information about website privacy practices. By following the MVC architecture with Svelte and Tailwind CSS, the extension will deliver a user-friendly experience while maintaining high code quality and comprehensive testing coverage.
-
-The project prioritizes user privacy, performance, and accessibility while providing valuable insights into website data collection practices. The modular architecture allows for future enhancements while maintaining a solid foundation for core functionality.
+The modular architecture supports future enhancements such as blocking capabilities, local ML, customizable risk profiles, and cross-browser support.

@@ -24,16 +24,27 @@ export class PrivacyDataController {
         // Create new PrivacyData instance
         this.currentPrivacyData = new PrivacyData(url);
 
+        // Add field for scriptDetails
+        this.currentPrivacyData.tracking.scriptDetails = [];
+
         // Start monitoring network requests
         this.startMonitoring();
 
-        // Removed detectPrivacyPolicy() call — content script handles policy detection
         // Cookies still collected normally
         await this.collectCookies(url);
 
         return this.currentPrivacyData;
     }
 
+    /**
+     * Accept script details from content script
+     */
+    addScriptDetails(list) {
+        if (!this.currentPrivacyData) return;
+
+        this.currentPrivacyData.tracking.scriptDetails = list;
+        this.notifyUpdate();
+    }
 
     /**
      * Start monitoring network requests
@@ -74,15 +85,9 @@ export class PrivacyDataController {
                 dataChanged = true;
             }
 
-            // Notify update through controller (which triggers score recalculation)
             if (dataChanged) {
-                // Use a small debounce to batch multiple rapid updates
-                if (this.updateTimeout) {
-                    clearTimeout(this.updateTimeout);
-                }
-                this.updateTimeout = setTimeout(() => {
-                    this.notifyUpdate();
-                }, 200);
+                if (this.updateTimeout) clearTimeout(this.updateTimeout);
+                this.updateTimeout = setTimeout(() => this.notifyUpdate(), 200);
             }
         };
 
@@ -90,9 +95,6 @@ export class PrivacyDataController {
         this.webRequestService.startMonitoring();
     }
 
-    /**
-     * Stop monitoring
-     */
     stopMonitoring() {
         if (this.requestListener) {
             this.webRequestService.removeListener(this.requestListener);
@@ -100,39 +102,24 @@ export class PrivacyDataController {
         this.webRequestService.stopMonitoring();
     }
 
-    /**
-     * Collect cookies for a domain
-     */
     async collectCookies(url) {
         try {
             const urlObj = new URL(url);
             const domain = urlObj.hostname;
 
-            // Get all cookies for the domain
             const cookies = await chrome.cookies.getAll({ domain });
-
-            // Also get cookies for parent domain (e.g., .example.com)
             const parentDomain = `.${domain}`;
             const parentCookies = await chrome.cookies.getAll({ domain: parentDomain });
 
-        // Combine and add to PrivacyData
-        const allCookies = [...cookies, ...parentCookies];
-        allCookies.forEach(cookie => {
-            this.currentPrivacyData.addCookie(cookie);
-        });
-        
-        // Notify update after initial cookie collection
-        if (allCookies.length > 0) {
-            this.notifyUpdate();
-        }
+            const allCookies = [...cookies, ...parentCookies];
+            allCookies.forEach(cookie => this.currentPrivacyData.addCookie(cookie));
+
+            if (allCookies.length > 0) this.notifyUpdate();
         } catch (error) {
-            console.error('Error collecting cookies:', error);
+            console.error("Error collecting cookies:", error);
         }
     }
 
-    /**
-     * Parse cookie string from Set-Cookie header
-     */
     parseCookieString(cookieString) {
         try {
             const parts = cookieString.split(';').map(p => p.trim());
@@ -149,54 +136,35 @@ export class PrivacyDataController {
                 sameSite: 'None'
             };
 
-            // Parse attributes
             parts.slice(1).forEach(part => {
                 const [key, val] = part.split('=').map(p => p.trim());
                 const keyLower = key.toLowerCase();
 
-                if (keyLower === 'domain') {
-                    cookie.domain = val;
-                } else if (keyLower === 'path') {
-                    cookie.path = val;
-                } else if (keyLower === 'secure') {
-                    cookie.secure = true;
-                } else if (keyLower === 'httponly') {
-                    cookie.httpOnly = true;
-                } else if (keyLower === 'samesite') {
-                    cookie.sameSite = val || 'None';
-                } else if (keyLower === 'expires' && val) {
-                    cookie.expirationDate = new Date(val).getTime() / 1000;
-                }
+                if (keyLower === 'domain') cookie.domain = val;
+                else if (keyLower === 'path') cookie.path = val;
+                else if (keyLower === 'secure') cookie.secure = true;
+                else if (keyLower === 'httponly') cookie.httpOnly = true;
+                else if (keyLower === 'samesite') cookie.sameSite = val || 'None';
+                else if (keyLower === 'expires' && val) cookie.expirationDate = new Date(val).getTime() / 1000;
             });
 
             return cookie;
         } catch (error) {
-            console.error('Error parsing cookie string:', error);
+            console.error("Error parsing cookie string:", error);
             return null;
         }
     }
 
-    /**
-     * Set privacy policy info from external detection (e.g., content script)
-     */
     setPrivacyPolicy(url, summary = null) {
         if (!this.currentPrivacyData) return;
         this.currentPrivacyData.setPrivacyPolicy(url, summary);
-        // Notify update after policy is set
         this.notifyUpdate();
     }
 
-
-    /**
-     * Get current privacy data
-     */
     getCurrentPrivacyData() {
         return this.currentPrivacyData;
     }
 
-    /**
-     * Save privacy data to storage
-     */
     async savePrivacyData() {
         if (!this.currentPrivacyData) return false;
 
@@ -207,42 +175,35 @@ export class PrivacyDataController {
         });
     }
 
-    /**
-     * Notify that privacy data has been updated and trigger score recalculation
-     */
     notifyUpdate() {
         if (!this.currentPrivacyData) return;
-        
-        // Send update message with summary and trigger score recalculation
+
         chrome.runtime.sendMessage({
             type: "privacyData:updated",
             summary: this.currentPrivacyData.getSummary(),
             privacyData: {
                 summary: this.currentPrivacyData.getSummary(),
                 cookies: {
-                    total: this.currentPrivacyData.cookies.firstParty.length + 
+                    total: this.currentPrivacyData.cookies.firstParty.length +
                            this.currentPrivacyData.cookies.thirdParty.length,
                     thirdParty: this.currentPrivacyData.cookies.thirdParty.length,
                     tracking: this.currentPrivacyData.cookies.tracking.length
                 },
                 tracking: {
                     scripts: this.currentPrivacyData.tracking.scripts.length,
-                    requests: this.currentPrivacyData.networkRequests.tracking.length
+                    requests: this.currentPrivacyData.networkRequests.tracking.length,
+                    scriptDetails: this.currentPrivacyData.tracking.scriptDetails || []
                 },
                 privacyPolicy: this.currentPrivacyData.privacyPolicy
             }
         }).catch(() => {});
     }
 
-    /**
-     * Load privacy data from storage
-     */
     async loadPrivacyData(hostname) {
         const key = `${CONSTANTS.STORAGE_KEYS.PRIVACY_DATA}_${hostname}`;
         const data = await this.storageService.get(key);
-        
+
         if (data) {
-            // Reconstruct PrivacyData object
             const privacyData = new PrivacyData(data.url);
             Object.assign(privacyData, data);
             return privacyData;
@@ -251,4 +212,3 @@ export class PrivacyDataController {
         return null;
     }
 }
-

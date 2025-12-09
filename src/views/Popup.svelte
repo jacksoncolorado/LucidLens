@@ -6,6 +6,7 @@
     import PrivacyScore from "./components/PrivacyScore.svelte";
     import DataCollectionSummary from "./components/DataCollectionSummary.svelte";
     import ScoreBreakdown from "./components/ScoreBreakdown.svelte";
+    import TrackingScriptDetails from "./components/TrackingScriptDetails.svelte";
 
     let info = {
         fullUrl: null,
@@ -25,12 +26,22 @@
     let aiSummary = null;
     let aiError = null;
 
+    // --- PATCH A: Freeze script list ---
+    let frozenScripts = null;
+    let freezeTimer = null;
+
+    // --- PATCH B: Pause updates during AI generation ---
+    let pauseUpdates = false;
+
     function handleUpdate(msg) {
-            if (msg?.type === "policyScrape:complete") {
+        if (pauseUpdates) return;   // 🔥 Block updates during AI summary
+
+        if (msg?.type === "policyScrape:complete") {
             if (info?.privacyData?.privacyPolicy) {
                 info.privacyData.privacyPolicy.url = msg.finalUrl;
             }
         }
+
         if (msg?.type === "privacyScore:updated") {
             info.privacyScore = msg.privacyScore;
             info.privacyScoreDetails = msg.privacyScoreDetails;
@@ -41,7 +52,8 @@
                     getSummary: () => msg.privacyData.summary
                 };
             }
-        } else if (msg?.type === "privacyData:updated" && privacyDataModel) {
+        } 
+        else if (msg?.type === "privacyData:updated" && privacyDataModel) {
             privacyDataModel = {
                 ...privacyDataModel,
                 getSummary: () => msg.summary
@@ -56,10 +68,16 @@
     onMount(() => {
         chrome.runtime.onMessage.addListener(handleUpdate);
         load();
+
+        // Freeze script list after load stabilizes
+        freezeTimer = setTimeout(() => {
+            frozenScripts = info?.privacyData?.tracking?.scriptDetails || [];
+        }, 2000);
     });
 
     onDestroy(() => {
         chrome.runtime.onMessage.removeListener(handleUpdate);
+        if (freezeTimer) clearTimeout(freezeTimer);
     });
 
     async function load() {
@@ -85,52 +103,47 @@
         }
     }
 
-async function generateSummary() {
-    aiLoading = true;
-    aiSummary = null;
-    aiError = null;
+    async function generateSummary() {
+        aiLoading = true;
+        aiSummary = null;
+        aiError = null;
 
-    try {
-        console.log("DEBUG PRIVACY POLICY:", info.privacyData?.privacyPolicy);
+        pauseUpdates = true;  // 🔥 STOP popup updates
 
-        const result = await PopupController.generateAISummary({
-            fullUrl: info.fullUrl,
-            host: info.host,
-            privacyScore: info.privacyScore,
-            cookies: info.privacyData?.cookies,
-            tracking: info.privacyData?.tracking,
-            privacyPolicy: info.privacyData?.privacyPolicy
-        });
+        try {
+            const result = await PopupController.generateAISummary({
+                fullUrl: info.fullUrl,
+                host: info.host,
+                privacyScore: info.privacyScore,
+                cookies: info.privacyData?.cookies,
+                tracking: info.privacyData?.tracking,
+                privacyPolicy: info.privacyData?.privacyPolicy
+            });
 
-        // 🔥 UPDATE SVELTE STATE WITH CANONICAL URL
-        if (result?.finalUrl && info?.privacyData?.privacyPolicy) {
-            console.log("[Popup] Updating displayed policy URL:", result.finalUrl);
-            info.privacyData.privacyPolicy.url = result.finalUrl;
+            if (result?.finalUrl && info?.privacyData?.privacyPolicy) {
+                info.privacyData.privacyPolicy.url = result.finalUrl;
+            }
+
+            if (result.success) {
+                aiSummary = result.summary;
+            } else {
+                aiError = result.summary || "Unknown AI error.";
+            }
+
+        } catch (err) {
+            aiError = "Failed to generate summary.";
+        } finally {
+            aiLoading = false;
+            pauseUpdates = false;   // 🔥 RESUME updates
         }
-
-        if (result.success) {
-            aiSummary = result.summary;
-        } else {
-            aiError = result.summary || "Unknown AI error.";
-        }
-
-    } catch (err) {
-        aiError = "Failed to generate summary.";
-    } finally {
-        aiLoading = false;
     }
-}
-
-
 </script>
 
 <div class="popup-container">
     <Header title="Privacy Lens" />
 
     {#if loading}
-        <div class="loading-state">
-            <p class="loading-text">Loading...</p>
-        </div>
+        <div class="loading-state"><p class="loading-text">Loading...</p></div>
 
     {:else if !info.fullUrl}
         <div class="error-state">
@@ -140,19 +153,19 @@ async function generateSummary() {
 
     {:else}
         <UrlDisplay 
-            url={info.fullUrl} 
-            hostname={info.host} 
-            isSecure={info.isSecure} 
+            url={info.fullUrl}
+            hostname={info.host}
+            isSecure={info.isSecure}
         />
 
         <PrivacyScore 
-            score={info.privacyScore} 
+            score={info.privacyScore}
             rating={info.privacyScoreDetails?.rating || "Unknown"}
             color={info.privacyScoreDetails 
                 ? (info.privacyScore >= 80 ? "#10b981" 
-                : info.privacyScore >= 60 ? "#3b82f6" 
-                : info.privacyScore >= 40 ? "#f59e0b" 
-                : "#ef4444") 
+                : info.privacyScore >= 60 ? "#3b82f6"
+                : info.privacyScore >= 40 ? "#f59e0b"
+                : "#ef4444")
                 : "#666"}
         />
 
@@ -169,9 +182,7 @@ async function generateSummary() {
 
         {#if info.privacyScoreDetails?.recommendations?.length > 0}
             <div class="recommendations">
-                <div class="recommendations-header">
-                    <span class="label">Recommendations</span>
-                </div>
+                <div class="recommendations-header"><span class="label">Recommendations</span></div>
                 <div class="recommendations-list">
                     {#each info.privacyScoreDetails.recommendations as rec}
                         <div class="recommendation-item priority-{rec.priority}">
@@ -183,7 +194,7 @@ async function generateSummary() {
             </div>
         {/if}
 
-        {#if info.privacyData?.privacyPolicy?.found}
+        {#if info?.privacyData?.privacyPolicy?.found}
             <div class="privacy-policy">
                 <div class="policy-header">
                     <span class="label">Privacy Policy</span>
@@ -191,11 +202,7 @@ async function generateSummary() {
                 </div>
 
                 {#if info.privacyData.privacyPolicy.url}
-                    <a 
-                        href={info.privacyData.privacyPolicy.url} 
-                        target="_blank" 
-                        class="policy-link"
-                    >
+                    <a href={info.privacyData.privacyPolicy.url} target="_blank" class="policy-link">
                         View Privacy Policy →
                     </a>
                 {/if}
@@ -203,11 +210,7 @@ async function generateSummary() {
         {/if}
 
         <button class="ai-btn" on:click={generateSummary} disabled={aiLoading}>
-            {#if aiLoading}
-                Analyzing...
-            {:else}
-                Generate AI Privacy Summary
-            {/if}
+            {#if aiLoading} Analyzing... {:else} Generate AI Privacy Summary {/if}
         </button>
 
         {#if aiSummary}
@@ -222,6 +225,9 @@ async function generateSummary() {
         {#if aiError}
             <div class="ai-error">{aiError}</div>
         {/if}
+
+        <!-- PATCH A: use frozen snapshot -->
+        <TrackingScriptDetails scripts={frozenScripts} />
 
         <button class="refresh-btn" on:click={load}>Refresh</button>
     {/if}
