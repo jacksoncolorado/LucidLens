@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Privacy Lens",
+  "name": "LucidLens",
   "version": "1.0.0",
-  "description": "Privacy Lens shows what privacy data websites collect and provides an AI-powered privacy summary.",
+  "description": "LucidLens shows what privacy data websites collect and provides an AI-powered privacy summary.",
 
   "permissions": [
     "tabs",
@@ -24,7 +24,7 @@
 
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Privacy Lens"
+    "default_title": "LucidLens"
   },
 
   "icons": {

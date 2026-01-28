@@ -5,7 +5,7 @@
 
 // src/services/xAIService.js
 //
-// Fully upgraded AI summarization engine for PrivacyLens.
+// Fully upgraded AI summarization engine for LucidLens.
 // Includes: polished summaries, category context, cleanup,
 // consistent section formatting, and safer handling of AI output.
 
@@ -72,7 +72,7 @@ class xAIService {
         const category = this.classifySite(data.host);
 
         const prompt = `
-You are PrivacyLens, a professional but approachable privacy analyst.
+You are LucidLens, a professional but approachable privacy analyst.
 Write a clear, easy-to-read summary for everyday users. Avoid legal jargon and keep sections concise.
 
 IMPORTANT:

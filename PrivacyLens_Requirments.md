@@ -1,4 +1,4 @@
-# Privacy Lens – Web Extension Requirements Document
+# LucidLens – Web Extension Requirements Document
 
 ============================================================
 PROJECT OVERVIEW
