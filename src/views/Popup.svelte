@@ -19,16 +19,15 @@
     };
 
     let loading = true;
+    let initialWait = true;
+    let initialTimer = null;
     let privacyDataModel = null;
+    let refreshTimer = null;
 
     // AI Summary State
     let aiLoading = false;
     let aiSummary = null;
     let aiError = null;
-
-    // --- PATCH A: Freeze script list ---
-    let frozenScripts = null;
-    let freezeTimer = null;
 
     // --- PATCH B: Pause updates during AI generation ---
     let pauseUpdates = false;
@@ -69,15 +68,21 @@
         chrome.runtime.onMessage.addListener(handleUpdate);
         load();
 
-        // Freeze script list after load stabilizes
-        freezeTimer = setTimeout(() => {
-            frozenScripts = info?.privacyData?.tracking?.scriptDetails || [];
-        }, 2000);
+        // Set a max wait for first data so UI shows after a short spinner
+        initialTimer = setTimeout(() => {
+            initialWait = false;
+        }, 1800);
+
+        // Periodically refresh snapshot so score and counts stay current
+        refreshTimer = setInterval(() => {
+            void refreshSnapshot();
+        }, 4000);
     });
 
     onDestroy(() => {
         chrome.runtime.onMessage.removeListener(handleUpdate);
-        if (freezeTimer) clearTimeout(freezeTimer);
+        if (initialTimer) clearTimeout(initialTimer);
+        if (refreshTimer) clearInterval(refreshTimer);
     });
 
     async function load() {
@@ -85,6 +90,11 @@
         aiSummary = null;
         aiError = null;
         aiLoading = false;
+        initialWait = true;
+        if (initialTimer) clearTimeout(initialTimer);
+        initialTimer = setTimeout(() => {
+            initialWait = false;
+        }, 1800);
 
         try {
             const data = await PopupController.loadWebsiteInfo();
@@ -100,6 +110,18 @@
             info.message = "Error loading website information";
         } finally {
             loading = false;
+        }
+    }
+
+    async function refreshSnapshot() {
+        try {
+            const data = await PopupController.loadWebsiteInfo();
+            info = data;
+            if (data.privacyData) {
+                privacyDataModel = { getSummary: () => data.privacyData.summary };
+            }
+        } catch (err) {
+            // keep last known info on failure
         }
     }
 
@@ -142,8 +164,8 @@
 <div class="popup-container">
     <Header title="Privacy Lens" />
 
-    {#if loading}
-        <div class="loading-state"><p class="loading-text">Loading...</p></div>
+    {#if loading || initialWait}
+        <div class="loading-state"><p class="loading-text">Gathering privacy data...</p></div>
 
     {:else if !info.fullUrl}
         <div class="error-state">
@@ -158,23 +180,28 @@
             isSecure={info.isSecure}
         />
 
-        <PrivacyScore 
-            score={info.privacyScore}
-            rating={info.privacyScoreDetails?.rating || "Unknown"}
-            color={info.privacyScoreDetails 
-                ? (info.privacyScore >= 80 ? "#10b981" 
-                : info.privacyScore >= 60 ? "#3b82f6"
-                : info.privacyScore >= 40 ? "#f59e0b"
-                : "#ef4444")
-                : "#666"}
-        />
-
-        {#if info.privacyScoreDetails?.factors}
-            <ScoreBreakdown
-                factors={info.privacyScoreDetails.factors}
-                score={info.privacyScoreDetails.score}
+        <div class="score-stack">
+            <PrivacyScore 
+                score={info.privacyScore}
+                rating={info.privacyScoreDetails?.rating || "Unknown"}
+                color={info.privacyScoreDetails 
+                    ? (info.privacyScore >= 80 ? "#10b981" 
+                    : info.privacyScore >= 60 ? "#3b82f6"
+                    : info.privacyScore >= 40 ? "#f59e0b"
+                    : "#ef4444")
+                    : "#666"}
             />
-        {/if}
+
+            {#if info.privacyScoreDetails?.factors}
+                <details class="score-breakdown-toggle">
+                    <summary>View score breakdown</summary>
+                    <ScoreBreakdown
+                        factors={info.privacyScoreDetails.factors}
+                        score={info.privacyScoreDetails.score}
+                    />
+                </details>
+            {/if}
+        </div>
 
         {#if info.privacyData}
             <DataCollectionSummary privacyData={privacyDataModel} />
@@ -226,44 +253,67 @@
             <div class="ai-error">{aiError}</div>
         {/if}
 
-        <!-- PATCH A: use frozen snapshot -->
-        <TrackingScriptDetails scripts={frozenScripts} />
+        <TrackingScriptDetails scripts={info?.privacyData?.tracking?.scriptDetails || []} />
 
         <button class="refresh-btn" on:click={load}>Refresh</button>
     {/if}
 </div>
 
 <style>
-.popup-container {
-    background: #0d0d0f;
-    border-radius: 10px;
-    padding: 20px;
-    width: 380px;
-    max-height: 600px;
-    overflow-y: auto;
-    box-shadow: 0 0 15px rgba(0, 132, 255, 0.5);
-    border: 1px solid #1a1a1a;
+:root {
+    color-scheme: dark;
 }
 
-/* Recommendations block (restored) */
+.popup-container {
+    --bg: #080808;
+    --bg-glow: radial-gradient(circle at 50% 0%, rgba(223, 38, 56, 0.16), transparent 55%);
+    --edge-glow: radial-gradient(circle at 10% 10%, rgba(255,255,255,0.05), transparent 45%), radial-gradient(circle at 90% 10%, rgba(255,255,255,0.05), transparent 45%);
+    --panel: rgba(255, 255, 255, 0.045);
+    --panel-strong: rgba(255, 255, 255, 0.06);
+    --panel-border: rgba(255, 255, 255, 0.12);
+    --panel-divider: rgba(255, 255, 255, 0.08);
+    --panel-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+    --text-strong: #f5f5f5;
+    --text-muted: #c8c8c8;
+    --text-subtle: #9aa0a6;
+    --red: #df2638;
+    --red-strong: #b61b2b;
+    --red-soft: rgba(223, 38, 56, 0.14);
+    --radius: 12px;
+
+    background: var(--bg);
+    background-image: var(--bg-glow), var(--edge-glow);
+    border-radius: 12px;
+    padding: 18px;
+    width: 400px;
+    max-height: 640px;
+    overflow-y: auto;
+    box-shadow: 0 12px 26px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255,255,255,0.05);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: var(--text-strong);
+}
+
+.label {
+    font-weight: 650;
+    color: var(--red);
+    font-size: 0.94rem;
+    letter-spacing: 0.01em;
+}
+
+/* Recommendations block */
 .recommendations {
     margin-top: 16px;
     margin-bottom: 16px;
-    background: #1a1a1a;
-    border-radius: 8px;
-    border: 1px solid #2a2a2a;
+    background: var(--panel);
+    border-radius: var(--radius);
+    border: 1px solid var(--panel-border);
     overflow: hidden;
+    box-shadow: var(--panel-shadow);
 }
 
 .recommendations-header {
     padding: 12px 16px;
-    border-bottom: 1px solid #2a2a2a;
-}
-
-.label {
-    font-weight: 600;
-    color: #66b3ff;
-    font-size: 0.9rem;
+    border-bottom: 1px solid var(--panel-divider);
 }
 
 .recommendations-list {
@@ -272,7 +322,7 @@
 
 .recommendation-item {
     padding: 10px 0;
-    border-bottom: 1px solid #252525;
+    border-bottom: 1px solid var(--panel-divider);
 }
 
 .recommendation-item:last-child {
@@ -281,20 +331,20 @@
 
 .rec-action {
     display: block;
-    color: #e6e6e6 !important;
-    font-weight: 600;
-    font-size: 0.85rem;
+    color: var(--text-strong) !important;
+    font-weight: 650;
+    font-size: 0.87rem;
     margin-bottom: 4px;
 }
 
 .rec-description {
     display: block;
-    color: #cccccc !important;
-    font-size: 0.8rem;
+    color: var(--text-muted) !important;
+    font-size: 0.82rem;
 }
 
 .recommendation-item.priority-high .rec-action {
-    color: #ef4444;
+    color: var(--red);
 }
 
 .recommendation-item.priority-medium .rec-action {
@@ -305,52 +355,57 @@
 .ai-btn {
     width: 100%;
     margin-top: 14px;
-    background: #0084ff;
-    padding: 10px 16px;
+    background: linear-gradient(135deg, var(--red) 0%, var(--red-strong) 100%);
+    padding: 11px 16px;
     color: white;
-    border-radius: 6px;
-    border: none;
-    font-size: 0.9rem;
-    font-weight: 600;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0.95rem;
+    font-weight: 700;
     cursor: pointer;
+    box-shadow: 0 6px 16px rgba(223, 38, 56, 0.25);
 }
 
 .ai-btn:hover {
-    background: #0a93ff;
+    filter: brightness(1.07);
 }
 
 .ai-btn:disabled {
-    background: #2a2a2a;
+    background: var(--panel);
+    border-color: var(--panel-border);
+    color: var(--text-subtle);
     cursor: not-allowed;
+    box-shadow: none;
 }
 
 .ai-summary {
     margin-top: 14px;
-    background: #1a1a1a;
+    background: var(--panel);
     padding: 12px;
-    border-radius: 6px;
-    border: 1px solid #333;
+    border-radius: 10px;
+    border: 1px solid var(--panel-border);
+    box-shadow: var(--panel-shadow);
 }
 
 .ai-summary summary {
-    color: #66b3ff;
+    color: var(--text-muted);
     cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 600;
+    font-size: 0.92rem;
+    font-weight: 650;
 }
 
 .ai-content {
     margin-top: 8px;
-    color: #ddd;
-    font-size: 0.85rem;
-    line-height: 1.25rem;
+    color: var(--text-strong);
+    font-size: 0.86rem;
+    line-height: 1.32rem;
 }
 
 .ai-error {
-    color: #ff6b6b;
+    color: var(--red);
     margin-top: 8px;
     text-align: center;
-    font-size: 0.85rem;
+    font-size: 0.88rem;
 }
 
 /* Privacy policy card */
@@ -358,9 +413,10 @@
     margin-top: 16px;
     margin-bottom: 16px;
     padding: 12px 16px;
-    background: #1a1a1a;
-    border-radius: 8px;
-    border: 1px solid #2a2a2a;
+    background: var(--panel);
+    border-radius: var(--radius);
+    border: 1px solid var(--panel-border);
+    box-shadow: var(--panel-shadow);
 }
 
 .policy-header {
@@ -372,41 +428,70 @@
 
 .policy-status {
     padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 600;
-}
-
-.policy-status.success {
-    background: rgba(16, 185, 129, 0.1);
-    color: #10b981;
-    border: 1px solid #10b981;
+    border-radius: 16px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    background: var(--red-soft);
+    color: var(--red);
+    border: 1px solid rgba(223, 38, 56, 0.4);
 }
 
 .policy-link {
-    color: #66b3ff;
+    color: var(--red);
     text-decoration: none;
-    font-size: 0.85rem;
+    font-size: 0.88rem;
+    font-weight: 600;
 }
 
 .policy-link:hover {
-    color: #99ccff;
+    color: #ff4a59;
 }
 
 /* Refresh button */
 .refresh-btn {
     width: 100%;
     margin-top: 16px;
-    background: #0084ff;
+    background: var(--panel-strong);
     padding: 10px 16px;
-    color: white;
-    border-radius: 6px;
-    border: none;
-    font-size: 0.9rem;
-    font-weight: 600;
+    color: var(--text-strong);
+    border-radius: 8px;
+    border: 1px solid var(--panel-border);
+    font-size: 0.92rem;
+    font-weight: 650;
+    cursor: pointer;
 }
 
 .refresh-btn:hover {
-    background: #0a93ff;
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.score-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.score-breakdown-toggle {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    box-shadow: var(--panel-shadow);
+}
+
+.score-breakdown-toggle summary {
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 650;
+    list-style: none;
+}
+
+.score-breakdown-toggle summary::-webkit-details-marker {
+    display: none;
+}
+
+.score-breakdown-toggle[open] summary {
+    color: var(--red);
 }
 </style>

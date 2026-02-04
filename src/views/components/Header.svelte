@@ -1,36 +1,39 @@
 <!-- src/views/components/Header.svelte -->
 <script>
+    import logoAndName from "../../assets/LogoandName.svg";
     export let title = "Privacy Lens";
 </script>
 
 <div class="header">
-    <div class="logo">
-        <span class="logo-icon">🔍</span>
-        <span class="logo-text">{title}</span>
+    <div class="logo-wrap">
+        <img class="logo-lockup" src={logoAndName} alt={`${title} logo`} />
     </div>
 </div>
 
 <style>
     .header {
-        margin-bottom: 20px;
-        padding-bottom: 16px;
-        border-bottom: 2px solid #2a2a2a;
-    }
-
-    .logo {
         display: flex;
-        align-items: center;
-        gap: 10px;
+        justify-content: center;
+        margin-bottom: 18px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     }
 
-    .logo-icon {
-        font-size: 1.8rem;
+    .logo-wrap {
+        padding: 8px;
+        border-radius: 12px;
+        background: radial-gradient(circle at 50% 30%, rgba(223, 38, 56, 0.18), rgba(0,0,0,0.0) 65%);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+        backdrop-filter: blur(4px);
+        border: 1px solid rgba(255, 255, 255, 0.04);
     }
 
-    .logo-text {
-        font-size: 1.4rem;
-        font-weight: 700;
-        color: #ffffff;
+    .logo-lockup {
+        width: min(240px, 72%);
+        height: auto;
+        display: block;
+        object-fit: contain;
+        filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.35));
     }
 </style>
 

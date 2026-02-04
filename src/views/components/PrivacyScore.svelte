@@ -37,23 +37,24 @@
 </div>
 
 <style>
-    .privacy-score {
-        margin-bottom: 20px;
-        padding: 16px;
-        background: #1a1a1a;
-        border-radius: 8px;
-        border: 1px solid #2a2a2a;
-    }
+.privacy-score {
+    margin-bottom: 20px;
+    padding: 16px;
+    background: var(--panel);
+    border-radius: var(--radius);
+    border: 1px solid var(--panel-border);
+    box-shadow: var(--panel-shadow);
+}
 
     .score-header {
         margin-bottom: 12px;
     }
 
-    .label {
-        font-weight: 600;
-        color: #66b3ff;
-        font-size: 0.9rem;
-    }
+.label {
+    font-weight: 650;
+    color: var(--red);
+    font-size: 0.95rem;
+}
 
     .score-display {
         display: flex;
@@ -69,40 +70,43 @@
     }
 
     .score-value {
-        font-size: 2.5rem;
-        font-weight: 700;
+        font-size: 2.6rem;
+        font-weight: 750;
         color: var(--score-color);
         line-height: 1;
     }
 
     .score-max {
-        font-size: 1.2rem;
-        color: #999;
-        font-weight: 500;
+        font-size: 1rem;
+        color: var(--text-subtle);
+        font-weight: 600;
     }
 
     .rating-badge {
         padding: 6px 12px;
-        border-radius: 6px;
-        background: rgba(var(--rating-color-rgb, 59, 130, 246), 0.1);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
         color: var(--rating-color);
-        font-weight: 600;
+        font-weight: 700;
         font-size: 0.85rem;
         border: 1px solid var(--rating-color);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25);
     }
 
     .score-bar {
         width: 100%;
         height: 8px;
-        background: #2a2a2a;
-        border-radius: 4px;
+        background: var(--panel-strong);
+        border-radius: 999px;
         overflow: hidden;
+        border: 1px solid var(--panel-border);
     }
 
     .score-bar-fill {
         height: 100%;
         transition: width 0.3s ease;
-        border-radius: 4px;
+        border-radius: 999px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.25);
     }
 </style>
 

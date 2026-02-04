@@ -149,9 +149,10 @@
 <style>
 .breakdown {
     margin-top: 16px;
-    background: #1a1a1a;
-    border-radius: 8px;
-    border: 1px solid #2a2a2a;
+    background: var(--panel);
+    border-radius: var(--radius);
+    border: 1px solid var(--panel-border);
+    box-shadow: var(--panel-shadow);
 }
 
 .breakdown-header {
@@ -160,14 +161,14 @@
     align-items: center;
     padding: 12px 16px;
     cursor: pointer;
-    color: #66b3ff;
-    font-weight: 600;
-    font-size: 0.9rem;
+    color: var(--red);
+    font-weight: 650;
+    font-size: 0.95rem;
 }
 
 .content {
     padding: 12px 16px;
-    border-top: 1px solid #2a2a2a;
+    border-top: 1px solid var(--panel-divider);
 }
 
 .item {
@@ -176,30 +177,30 @@
 }
 
 .item-title {
-    color: #e6e6e6;
-    font-weight: 600;
+    color: var(--text-strong);
+    font-weight: 650;
     margin-bottom: 2px;
-    font-size: 0.9rem;
+    font-size: 0.92rem;
     display: flex;
     align-items: center;
 }
 
 .item-desc {
-    color: #aaa;
-    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-size: 0.86rem;
 }
 
 /* Tooltip styles */
 .info-icon {
     margin-left: 6px;
     font-size: 0.8rem;
-    color: #7da7ff;
+    color: var(--red);
     cursor: pointer;
     user-select: none;
 }
 
 .info-icon:hover {
-    color: #a5c8ff;
+    color: #ff4a59;
 }
 
 .tooltip-parent {
@@ -211,24 +212,24 @@
     top: 20px;
     left: 0;
     width: 260px;
-    background: #0f0f11;
-    border: 1px solid #333;
+    background: rgba(0,0,0,0.7);
+    border: 1px solid var(--panel-border);
     padding: 10px 12px;
     border-radius: 6px;
-    color: #ddd;
+    color: var(--text-muted);
     font-size: 0.78rem;
     line-height: 1.15rem;
     max-height: 160px;
     overflow-y: auto;
     z-index: 99;
-    box-shadow: 0 0 12px rgba(0, 132, 255, 0.35);
+    box-shadow: 0 0 12px rgba(223, 38, 56, 0.25);
 }
 
 .final {
     margin-top: 12px;
     padding-top: 12px;
-    border-top: 1px solid #333;
-    color: #ccc;
-    font-size: 0.85rem;
+    border-top: 1px solid var(--panel-divider);
+    color: var(--text-muted);
+    font-size: 0.86rem;
 }
 </style>

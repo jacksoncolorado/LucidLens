@@ -45,61 +45,68 @@
 <style>
     .url-display {
         margin-bottom: 16px;
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: var(--radius);
+        padding: 12px 14px;
+        box-shadow: var(--panel-shadow);
     }
 
     .url-header {
         display: flex;
         align-items: center;
         gap: 8px;
-        margin-bottom: 6px;
+        margin-bottom: 8px;
     }
 
     .label {
-        font-weight: 600;
-        color: #66b3ff;
-        font-size: 0.9rem;
+        font-weight: 650;
+        color: var(--red);
+        font-size: 0.95rem;
     }
 
     .secure-badge, .insecure-badge {
-        font-size: 0.85rem;
+        font-size: 0.9rem;
     }
 
     .url-content {
         display: flex;
         align-items: center;
         gap: 8px;
-        background: #1a1a1a;
-        padding: 8px 12px;
-        border-radius: 6px;
-        border: 1px solid #2a2a2a;
+        background: var(--panel-strong);
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--panel-border);
     }
 
     .url-text {
-        color: #e6e6e6;
-        font-size: 0.85rem;
+        color: var(--text-strong);
+        font-size: 0.9rem;
         word-break: break-all;
         flex: 1;
     }
 
     .copy-btn {
-        background: transparent;
-        border: none;
-        color: #66b3ff;
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        color: var(--text-muted);
         cursor: pointer;
-        padding: 4px;
-        font-size: 0.9rem;
-        opacity: 0.7;
-        transition: opacity 0.2s;
+        padding: 6px;
+        font-size: 0.95rem;
+        border-radius: 8px;
+        transition: border-color 0.2s, color 0.2s, background 0.2s;
     }
 
     .copy-btn:hover {
-        opacity: 1;
+        color: var(--text-strong);
+        border-color: rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.05);
     }
 
     .hostname {
         margin-top: 6px;
-        color: #999;
-        font-size: 0.8rem;
+        color: var(--text-subtle);
+        font-size: 0.82rem;
     }
 </style>
 

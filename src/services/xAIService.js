@@ -118,6 +118,10 @@ ${JSON.stringify({ ...data, category }, null, 2)}
 `;
 
         try {
+            if (!XAI_API_KEY) {
+                throw new Error("Missing xAI API key");
+            }
+
             const response = await fetch("https://api.x.ai/v1/chat/completions", {
                 method: "POST",
                 headers: {

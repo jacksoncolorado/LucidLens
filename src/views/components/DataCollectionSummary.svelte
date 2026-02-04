@@ -65,10 +65,11 @@
 <style>
     .data-summary {
         margin-bottom: 16px;
-        background: #1a1a1a;
-        border-radius: 8px;
-        border: 1px solid #2a2a2a;
+        background: var(--panel);
+        border-radius: var(--radius);
+        border: 1px solid var(--panel-border);
         overflow: hidden;
+        box-shadow: var(--panel-shadow);
     }
 
     .summary-header {
@@ -82,30 +83,30 @@
     }
 
     .summary-header:hover {
-        background: #222;
+        background: var(--panel-strong);
     }
 
     .label {
-        font-weight: 600;
-        color: #66b3ff;
-        font-size: 0.9rem;
+        font-weight: 650;
+        color: var(--red);
+        font-size: 0.95rem;
     }
 
     .toggle-icon {
-        color: #999;
-        font-size: 0.8rem;
+        color: var(--text-subtle);
+        font-size: 0.82rem;
     }
 
     .summary-content {
         padding: 12px 16px;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid var(--panel-divider);
     }
 
     .summary-item {
         display: flex;
         justify-content: space-between;
         padding: 8px 0;
-        border-bottom: 1px solid #252525;
+        border-bottom: 1px solid var(--panel-divider);
     }
 
     .summary-item:last-child {
@@ -113,14 +114,14 @@
     }
 
     .item-label {
-        color: #ccc;
-        font-size: 0.85rem;
+        color: var(--text-muted);
+        font-size: 0.86rem;
     }
 
     .item-value {
-        color: #e6e6e6;
-        font-weight: 600;
-        font-size: 0.85rem;
+        color: var(--text-strong);
+        font-weight: 700;
+        font-size: 0.86rem;
     }
 
     .item-value.warning {
@@ -128,7 +129,7 @@
     }
 
     .item-value.danger {
-        color: #ef4444;
+        color: var(--red);
     }
 
     .item-value.success {
@@ -137,12 +138,12 @@
 
     .summary-preview {
         padding: 8px 16px;
-        border-top: 1px solid #2a2a2a;
+        border-top: 1px solid var(--panel-divider);
     }
 
     .preview-text {
-        color: #999;
-        font-size: 0.8rem;
+        color: var(--text-subtle);
+        font-size: 0.82rem;
     }
 </style>
 

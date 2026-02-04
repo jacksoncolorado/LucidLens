@@ -1,67 +1,6 @@
 // contentScripts/privacyScanner.js
 
 // -----------------------------
-// TRACKING SCRIPT CLASSIFIER
-// -----------------------------
-
-function classifyScript(url, pageHost) {
-    const lc = url.toLowerCase();
-    const hostname = (() => {
-        try {
-            if (url.startsWith("http")) {
-                return new URL(url).hostname;
-            }
-        } catch {}
-        return pageHost; // fallback
-    })();
-
-    const isThirdParty = hostname !== pageHost;
-
-    let category = "Site Script";
-    let risk = "Low";
-    let description = "General site functionality script.";
-
-    const match = (str) => lc.includes(str);
-
-    // Analytics
-    if (match("analytics") || match("metric") || match("stats") || match("gtm")) {
-        category = "Analytics Tracking";
-        description = "Collects usage or engagement data.";
-        risk = isThirdParty ? "Moderate" : "Low";
-    }
-
-    // Behavior / heatmap / session replay
-    if (match("mouse") || match("heatmap") || match("session") || match("record")) {
-        category = "Behavior Tracking";
-        description = "Tracks interactions such as clicks, scroll, or mouse movement.";
-        risk = "Moderate";
-    }
-
-    // Fingerprinting
-    if (match("fingerprint") || match("fpjs") || match("finger")) {
-        category = "Fingerprinting";
-        description = "Collects device/browser attributes to identify users.";
-        risk = "High";
-    }
-
-    // Ads
-    if (match("adservice") || match("ads") || match("advert")) {
-        category = "Advertising Tracker";
-        description = "Used for targeted ads or profiling activity.";
-        risk = "High";
-    }
-
-    return {
-        url,
-        hostname,
-        isThirdParty,
-        category,
-        risk,
-        description
-    };
-}
-
-// -----------------------------
 // SCRIPT COLLECTION
 // -----------------------------
 function collectScripts() {
@@ -70,19 +9,12 @@ function collectScripts() {
         .map(s => s.src)
         .filter(src => src && src.length > 0);
 
-    const seen = new Set();
-    const details = [];
-
-    for (const src of scripts) {
-        if (seen.has(src)) continue;
-        seen.add(src);
-
-        details.push(classifyScript(src, pageHost));
-    }
+    const unique = Array.from(new Set(scripts));
 
     chrome.runtime.sendMessage({
         type: "trackingScripts:detected",
-        scripts: details
+        pageHost,
+        scripts: unique
     });
 }
 
